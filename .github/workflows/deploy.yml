@@ -34,17 +34,21 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          # Accept exe.dev VM host keys on first connect
           ssh-keyscan "${{ secrets.VM_NAME }}.exe.xyz" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Copy binary
+        env:
+          SSH_OPTS: -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no
+          VM: exedev@${{ secrets.VM_NAME }}.exe.xyz
         run: |
-          ssh -o GlobalKnownHostsFile=/dev/null exedev@${{ secrets.VM_NAME }}.exe.xyz \
-            "mkdir -p ~/sydney.tylerrouze.com/target/release"
-          scp -o GlobalKnownHostsFile=/dev/null target/release/wedding-rsvp \
-            exedev@${{ secrets.VM_NAME }}.exe.xyz:~/sydney.tylerrouze.com/target/release/wedding-rsvp
+          ssh $SSH_OPTS $VM "mkdir -p /home/exedev/sydney.tylerrouze.com/target/release"
+          scp $SSH_OPTS target/release/wedding-rsvp \
+            $VM:/home/exedev/sydney.tylerrouze.com/target/release/wedding-rsvp
 
       - name: Restart service
+        env:
+          SSH_OPTS: -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no
+          VM: exedev@${{ secrets.VM_NAME }}.exe.xyz
         run: |
-          ssh -o GlobalKnownHostsFile=/dev/null exedev@${{ secrets.VM_NAME }}.exe.xyz \
+          ssh $SSH_OPTS $VM \
             "sudo systemctl restart wedding && systemctl is-active --quiet wedding && echo 'deployed ok'"
