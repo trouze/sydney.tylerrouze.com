@@ -39,10 +39,12 @@ jobs:
 
       - name: Copy binary
         run: |
-          scp target/release/wedding-rsvp \
-            user@${{ secrets.VM_NAME }}.exe.xyz:~/sydney.tylerrouze.com/target/release/wedding-rsvp
+          ssh -o GlobalKnownHostsFile=/dev/null exedev@${{ secrets.VM_NAME }}.exe.xyz \
+            "mkdir -p ~/sydney.tylerrouze.com/target/release"
+          scp -o GlobalKnownHostsFile=/dev/null target/release/wedding-rsvp \
+            exedev@${{ secrets.VM_NAME }}.exe.xyz:~/sydney.tylerrouze.com/target/release/wedding-rsvp
 
       - name: Restart service
         run: |
-          ssh user@${{ secrets.VM_NAME }}.exe.xyz \
+          ssh -o GlobalKnownHostsFile=/dev/null exedev@${{ secrets.VM_NAME }}.exe.xyz \
             "sudo systemctl restart wedding && systemctl is-active --quiet wedding && echo 'deployed ok'"
