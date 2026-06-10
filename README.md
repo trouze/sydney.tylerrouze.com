@@ -38,7 +38,7 @@ ssh exe.dev ls --json | jq -r '.vms[0].vm_name'
 
 **5. Run the setup script on first VM boot:**
 ```bash
-ssh user@<vm-name>.exe.xyz 'bash -s' < setup.sh
+ssh exedev@<vm-name>.exe.xyz 'bash -s' < setup.sh
 ```
 
 ## Local dev

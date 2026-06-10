@@ -12,7 +12,7 @@ if command -v apt-get &>/dev/null; then
   apt-get update -qq && apt-get install -y -qq libsqlite3-dev pkg-config
 fi
 
-cd /home/user/sydney.tylerrouze.com
+cd /home/exedev/sydney.tylerrouze.com
 
 # Build release binary
 cargo build --release
@@ -24,9 +24,9 @@ Description=Sydney's Wedding Site
 After=network.target
 
 [Service]
-User=user
-WorkingDirectory=/home/user/sydney.tylerrouze.com
-ExecStart=/home/user/sydney.tylerrouze.com/target/release/wedding-rsvp
+User=exedev
+WorkingDirectory=/home/exedev/sydney.tylerrouze.com
+ExecStart=/home/exedev/sydney.tylerrouze.com/target/release/wedding-rsvp
 Restart=on-failure
 Environment=DATABASE_URL=sqlite:data/wedding.db
 Environment=RUST_LOG=wedding_rsvp=info,tower_http=info
