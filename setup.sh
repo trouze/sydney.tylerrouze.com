@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Install Rust if not present
+if ! command -v cargo &>/dev/null; then
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+  source "$HOME/.cargo/env"
+fi
+
+# Install sqlite3 dev headers (needed by libsqlite3-sys)
+if command -v apt-get &>/dev/null; then
+  apt-get update -qq && apt-get install -y -qq libsqlite3-dev pkg-config
+fi
+
+cd /home/user/sydney.tylerrouze.com
+
+# Build release binary
+cargo build --release
+
+# Install a systemd service so the app restarts on reboot
+cat > /etc/systemd/system/wedding.service <<EOF
+[Unit]
+Description=Sydney's Wedding Site
+After=network.target
+
+[Service]
+User=user
+WorkingDirectory=/home/user/sydney.tylerrouze.com
+ExecStart=/home/user/sydney.tylerrouze.com/target/release/wedding-rsvp
+Restart=on-failure
+Environment=DATABASE_URL=sqlite:data/wedding.db
+Environment=RUST_LOG=wedding_rsvp=info,tower_http=info
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now wedding
+echo "Setup complete. Site running on port 8080."
