@@ -23,12 +23,14 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:data/wedding.db".to_string());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:data/wedding.db".to_string());
 
     // Ensure the data directory exists for the SQLite file
     if let Some(path) = database_url.strip_prefix("sqlite:") {
-        let parent = std::path::Path::new(path).parent().unwrap_or(std::path::Path::new("."));
+        let parent = std::path::Path::new(path)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| anyhow::anyhow!("failed to create db directory: {e}"))?;

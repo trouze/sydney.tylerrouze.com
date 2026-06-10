@@ -1,17 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct Rsvp {
-    pub id: String,
-    pub name: String,
-    pub email: String,
-    pub attending: bool,
-    pub guest_count: i64,
-    pub meal_choice: Option<String>,
-    pub dietary_restrictions: Option<String>,
-    pub message: Option<String>,
-    pub created_at: String,
-}
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct RsvpForm {
