@@ -12,7 +12,8 @@ pub async fn connect(database_url: &str) -> anyhow::Result<Db> {
     let path = database_url.strip_prefix("sqlite:").unwrap_or(database_url);
     let opts = SqliteConnectOptions::new()
         .filename(path)
-        .create_if_missing(true);
+        .create_if_missing(true)
+        .foreign_keys(true);
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)

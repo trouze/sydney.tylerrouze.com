@@ -4,6 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Tyler & Sydney{% endblock %} · Tyler & Sydney Rouze</title>
+
+  <!-- Favicons / PWA -->
+  <link rel="icon" href="/static/favicon/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
+  <link rel="apple-touch-icon" href="/static/favicon/apple-touch-icon.png">
+  <link rel="manifest" href="/static/favicon/manifest.webmanifest">
+  <meta name="theme-color" content="#fafaf9">
+
+  <!-- Social preview -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Tyler & Sydney Rouze">
+  <meta property="og:title" content="Tyler & Sydney Rouze">
+  <meta property="og:description" content="We're getting married — September 2026 at Schrute Farms.">
+  <meta property="og:image" content="https://sydney.tylerrouze.com/static/images/couple-1.jpg">
+  <meta property="og:url" content="https://sydney.tylerrouze.com/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Tyler & Sydney Rouze">
+  <meta name="twitter:description" content="We're getting married — September 2026 at Schrute Farms.">
+  <meta name="twitter:image" content="https://sydney.tylerrouze.com/static/images/couple-1.jpg">
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,7 +42,9 @@
       <a href="/" class="font-display text-xl tracking-widest text-stone-700">T &amp; S</a>
       <ul class="flex gap-8 text-xs tracking-widest uppercase text-stone-500">
         <li><a href="/" class="hover:text-stone-800 transition-colors">Home</a></li>
+        <li><a href="/story" class="hover:text-stone-800 transition-colors">Our Story</a></li>
         <li><a href="/details" class="hover:text-stone-800 transition-colors">Details</a></li>
+        <li><a href="/registry" class="hover:text-stone-800 transition-colors">Registry</a></li>
         <li><a href="/rsvp" class="hover:text-stone-800 transition-colors">RSVP</a></li>
       </ul>
     </div>

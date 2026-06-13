@@ -7,9 +7,10 @@ if ! command -v cargo &>/dev/null; then
   source "$HOME/.cargo/env"
 fi
 
-# Install sqlite3 dev headers (needed by libsqlite3-sys)
+# Install sqlite3 dev headers (needed by libsqlite3-sys) and the sqlite3 CLI
+# (used by the deploy workflow's pre-launch DB reset guard).
 if command -v apt-get &>/dev/null; then
-  apt-get update -qq && apt-get install -y -qq libsqlite3-dev pkg-config
+  apt-get update -qq && apt-get install -y -qq libsqlite3-dev sqlite3 pkg-config
 fi
 
 cd /home/exedev/sydney.tylerrouze.com
@@ -28,7 +29,11 @@ User=exedev
 WorkingDirectory=/home/exedev/sydney.tylerrouze.com
 ExecStart=/home/exedev/sydney.tylerrouze.com/target/release/wedding-rsvp
 Restart=on-failure
-Environment=DATABASE_URL=sqlite:data/wedding.db
+# App config (ADMIN_TOKEN, LISTMONK_*, optional DATABASE_URL) is written here by
+# the deploy workflow from GitHub Secrets/Variables. Leading '-' = optional, so a
+# fresh VM still boots before the first deploy creates the file. DATABASE_URL
+# defaults to sqlite:data/wedding.db in-app when unset.
+EnvironmentFile=-/home/exedev/sydney.tylerrouze.com/wedding.env
 Environment=RUST_LOG=wedding_rsvp=info,tower_http=info
 
 [Install]

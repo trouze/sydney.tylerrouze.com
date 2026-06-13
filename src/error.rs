@@ -7,6 +7,8 @@ use axum::{
 pub enum AppError {
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
+    #[error("template error: {0}")]
+    Template(#[from] askama::Error),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

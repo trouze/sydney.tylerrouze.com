@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<section class="py-20 px-6">
+  <div class="max-w-4xl mx-auto">
+
+    <div class="flex justify-between items-center mb-2">
+      <nav class="flex gap-6 text-xs tracking-widest uppercase">
+        <span class="text-stone-800 border-b border-stone-800 pb-1">Parties</span>
+        <a href="/admin/meals" class="text-stone-400 hover:text-stone-700 transition-colors">Meals</a>
+        <a href="/admin/events" class="text-stone-400 hover:text-stone-700 transition-colors">Events</a>
+        <a href="/admin/analytics" class="text-stone-400 hover:text-stone-700 transition-colors">Analytics</a>
+        <a href="/admin/import" class="text-stone-400 hover:text-stone-700 transition-colors">Import</a>
+      </nav>
+      <form method="post" action="/admin/logout">
+        <button type="submit"
+          class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">
+          Log out
+        </button>
+      </form>
+    </div>
+
+    <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-4 text-center">Couple Only</p>
+    <h1 class="font-display text-6xl text-stone-800 text-center">Admin Dashboard</h1>
+    <div class="w-12 h-px bg-stone-300 mx-auto mt-8 mb-16"></div>
+
+    <!-- ============ PARTIES ============ -->
+    <div class="flex items-baseline justify-between mb-6">
+      <h2 class="font-display text-4xl text-stone-800">Parties &amp; Guests</h2>
+      <a href="/admin/qr/all.zip" download="qr-codes.zip"
+         class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">
+        Download All QRs
+      </a>
+    </div>
+
+    {% if parties.is_empty() %}
+    <p class="text-stone-400 text-sm mb-6">No parties yet. Add one below.</p>
+    {% else %}
+    <div class="space-y-6 mb-10">
+      {% for pv in parties %}
+      <div class="border border-stone-200 bg-white p-5">
+        <div class="flex items-baseline justify-between gap-3">
+          <h3 class="font-display text-2xl text-stone-800">{{ pv.party.label }}</h3>
+          <div class="flex items-baseline gap-3">
+            <code class="text-xs tracking-[0.2em] uppercase text-stone-500 bg-stone-100 px-2 py-1">{{ pv.party.invite_code }}</code>
+            <a href="/admin/parties/{{ pv.party.id }}/edit" class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">Edit</a>
+            <a href="/admin/parties/{{ pv.party.id }}/qr.svg" download="qr-{{ pv.party.invite_code }}.svg" class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">QR</a>
+          </div>
+        </div>
+        {% if pv.guests.is_empty() %}
+        <p class="text-stone-400 text-sm mt-3">No guests.</p>
+        {% else %}
+        <ul class="mt-3 space-y-1 text-sm text-stone-600">
+          {% for g in pv.guests %}
+          <li>
+            {{ g.first_name }} {{ g.last_name }}
+            {% if g.is_plus_one %}<span class="text-xs text-stone-400 uppercase tracking-widest">+1</span>{% endif %}
+            {% if let Some(email) = g.email %}<span class="text-stone-400">&middot; {{ email }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Add party form -->
+    <div class="border border-stone-200 bg-stone-50 p-5 mb-20">
+      <h3 class="text-xs tracking-widest uppercase text-stone-500 mb-4">Add a Party</h3>
+      <form method="post" action="/admin/parties" class="space-y-4">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs tracking-widest uppercase text-stone-400 mb-2">Party Label</label>
+            <input type="text" name="label" required placeholder="The Smith Family"
+              class="w-full border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+          </div>
+          <div>
+            <label class="block text-xs tracking-widest uppercase text-stone-400 mb-2">Last Name (for invite code)</label>
+            <input type="text" name="last_name" required placeholder="Smith"
+              class="w-full border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+          </div>
+        </div>
+
+        <p class="text-xs tracking-widest uppercase text-stone-400 pt-2">Guests</p>
+        {% for i in 0..6 %}
+        <div class="border-b border-stone-100 pb-3">
+          <div class="grid sm:grid-cols-4 gap-3 items-center">
+            <input type="text" name="first_names" placeholder="First name"
+              class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+            <input type="text" name="last_names" placeholder="Last name (optional)"
+              class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+            <input type="email" name="emails" placeholder="Email (optional)"
+              class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+            <label class="text-sm text-stone-500 flex items-center gap-2">
+              <input type="checkbox" name="plus_ones" value="{{ i }}" /> Plus-one
+            </label>
+          </div>
+          {% if !events.is_empty() %}
+          <div class="flex flex-wrap gap-x-5 gap-y-2 pl-1 mt-2">
+            <span class="text-xs tracking-widest uppercase text-stone-300">Invited to</span>
+            {% for e in events %}
+            <label class="text-sm text-stone-500 flex items-center gap-2">
+              <input type="checkbox" name="inv:{{ i }}:{{ e.id }}" checked /> {{ e.name }}
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+        <p class="text-xs text-stone-400">Leave a row's first name blank to skip it. Per-guest last name defaults to the party last name. Guests are invited to every event by default — uncheck any they're not invited to.</p>
+
+        <button type="submit"
+          class="py-3 px-8 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors">
+          Create Party
+        </button>
+      </form>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

@@ -4,3 +4,8 @@ data/
 *.db-shm
 *.db-wal
 .env
+.env.secrets
+.env.variables
+
+# macOS
+.DS_Store

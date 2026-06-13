@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Party{% endblock %}
+
+{% block content %}
+<section class="py-20 px-6">
+  <div class="max-w-2xl mx-auto">
+
+    <div class="mb-2">
+      <a href="/admin" class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">&larr; Back to Dashboard</a>
+    </div>
+
+    <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-4 text-center">Edit</p>
+    <h1 class="font-display text-5xl text-stone-800 text-center">{{ party.label }}</h1>
+    <p class="text-center mt-3"><code class="text-xs tracking-[0.2em] uppercase text-stone-500 bg-stone-100 px-2 py-1">{{ party.invite_code }}</code></p>
+    <div class="w-12 h-px bg-stone-300 mx-auto mt-8 mb-12"></div>
+
+    <form method="post" action="/admin/parties/{{ party.id }}" class="space-y-8">
+
+      <div>
+        <label class="block text-xs tracking-widest uppercase text-stone-400 mb-2">Party Label</label>
+        <input type="text" name="label" value="{{ party.label }}" required
+          class="w-full border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 focus:outline-none focus:border-stone-600" />
+      </div>
+
+      <!-- Existing guests -->
+      <div>
+        <p class="text-xs tracking-widest uppercase text-stone-400 mb-4">Guests</p>
+        {% if guests.is_empty() %}
+        <p class="text-stone-400 text-sm mb-4">No guests yet — add some below.</p>
+        {% else %}
+        <div class="space-y-4">
+          {% for row in guests %}
+          <div class="grid sm:grid-cols-4 gap-3 items-center">
+            <input type="hidden" name="existing_id" value="{{ row.g.id }}" />
+            <input type="text" name="existing_first" value="{{ row.g.first_name }}" placeholder="First name"
+              class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+            <input type="text" name="existing_last" value="{{ row.g.last_name }}" placeholder="Last name"
+              class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+            <input type="email" name="existing_email" value="{% if let Some(e) = row.g.email %}{{ e }}{% endif %}" placeholder="Email"
+              class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+            <label class="text-sm text-stone-500 flex items-center gap-2">
+              <input type="checkbox" name="existing_plus" value="{{ loop.index0 }}" {% if row.g.is_plus_one %}checked{% endif %} /> Plus-one
+            </label>
+          </div>
+          {% if !event_names.is_empty() %}
+          <div class="flex flex-wrap gap-x-5 gap-y-2 pl-1 pb-2 border-b border-stone-100">
+            <span class="text-xs tracking-widest uppercase text-stone-300">Invited to</span>
+            {% for cell in row.cells %}
+            <label class="text-sm text-stone-500 flex items-center gap-2">
+              <input type="checkbox" name="inv:{{ row.g.id }}:{{ cell.event_id }}" {% if cell.checked %}checked{% endif %} />
+              {{ event_names[loop.index0] }}
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <p class="text-xs text-stone-400 mt-3">Clearing a guest's first name leaves them unchanged (guests aren't deleted here). Uncheck an event to remove that guest's invitation to it.</p>
+        {% endif %}
+      </div>
+
+      <!-- Add new guests -->
+      <div>
+        <p class="text-xs tracking-widest uppercase text-stone-400 mb-1">Add Guests</p>
+        <p class="text-xs text-stone-400 mb-4">New guests are invited to all events; save, then uncheck any above.</p>
+        {% for i in 0..3 %}
+        <div class="grid sm:grid-cols-4 gap-3 items-center mb-3">
+          <input type="text" name="first_names" placeholder="First name"
+            class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+          <input type="text" name="last_names" placeholder="Last name"
+            class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+          <input type="email" name="emails" placeholder="Email (optional)"
+            class="border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+          <label class="text-sm text-stone-500 flex items-center gap-2">
+            <input type="checkbox" name="plus_ones" value="{{ i }}" /> Plus-one
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="flex gap-4 pt-2">
+        <button type="submit"
+          class="py-3 px-8 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors">
+          Save Changes
+        </button>
+        <a href="/admin"
+          class="py-3 px-8 text-xs tracking-widest uppercase border border-stone-300 text-stone-500 hover:text-stone-800 hover:border-stone-600 transition-colors">
+          Cancel
+        </a>
+      </div>
+    </form>
+
+  </div>
+</section>
+{% endblock %}

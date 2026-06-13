@@ -1,0 +1,1 @@
+This is a wedding website and application using the following tech stack: rust, htmx frontend (https://htmx.org/), sqlite backend, all deployed on a exe.dev VM which is a standard linux box with some proxy/networking stuff done for me. See exe.dev docs when needed (https://exe.dev/llms.txt). 
