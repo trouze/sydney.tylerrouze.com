@@ -45,6 +45,18 @@ jobs:
           scp $SSH_OPTS target/release/wedding-rsvp \
             $VM:/home/exedev/sydney.tylerrouze.com/target/release/wedding-rsvp
 
+      # Static assets (favicons, images, manifest) are served at runtime from the
+      # `static/` dir relative to the service's WorkingDirectory -- they are NOT
+      # baked into the binary, so they must be shipped separately. --delete keeps
+      # the VM in sync (removed files, e.g. the old .jpg favicons, are pruned).
+      - name: Copy static assets
+        env:
+          SSH_OPTS: -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no
+          VM: exedev@${{ secrets.VM_NAME }}.exe.xyz
+        run: |
+          rsync -az --delete -e "ssh $SSH_OPTS" \
+            static/ "$VM:/home/exedev/sydney.tylerrouze.com/static/"
+
       # Pre-launch only: wipe the DB so sqlx re-runs migrations from scratch.
       # Controlled by the repo variable RESET_DB (Settings -> Secrets and
       # variables -> Actions -> Variables). Set it to 'true' while the schema is
