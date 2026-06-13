@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<section class="py-24 px-6">
+  <div class="max-w-md mx-auto text-center">
+
+    <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-5">Couple Only</p>
+    <h1 class="font-display text-7xl text-stone-800">Admin</h1>
+    <div class="w-12 h-px bg-stone-300 mx-auto mt-10"></div>
+
+    {% if let Some(message) = error %}
+    <p class="text-sm text-rose-600 mt-8">{{ message }}</p>
+    {% endif %}
+
+    <form method="post" action="/admin/login" class="mt-10 space-y-6">
+      <div>
+        <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Password</label>
+        <input
+          type="password"
+          name="token"
+          required
+          autocomplete="current-password"
+          class="w-full text-center tracking-[0.2em] border-b border-stone-300 bg-transparent pb-2 text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600 transition-colors text-sm"
+          placeholder="••••••••"
+        />
+      </div>
+      <button
+        type="submit"
+        class="w-full py-4 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors"
+      >
+        Sign In
+      </button>
+    </form>
+
+  </div>
+</section>
+{% endblock %}
