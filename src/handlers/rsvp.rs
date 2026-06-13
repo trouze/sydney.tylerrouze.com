@@ -137,6 +137,7 @@ pub async fn rsvp_submit(
     let mut meal: HashMap<String, String> = HashMap::new();
     let mut diet: HashMap<String, String> = HashMap::new();
     let mut message = String::new();
+    let mut submitted_by_raw = String::new();
     for (key, value) in fields {
         if key == "attend" {
             if let Some((g, e)) = value.split_once(':') {
@@ -152,10 +153,16 @@ pub async fn rsvp_submit(
             }
         } else if key == "message" {
             message = value;
+        } else if key == "submitted_by" {
+            submitted_by_raw = value;
         }
     }
     let message = message.trim();
     let message = (!message.is_empty()).then(|| message.to_string());
+
+    // Only trust submitted_by if it identifies one of THIS party's guests.
+    let submitted_by =
+        (guests.iter().any(|g| g.id == submitted_by_raw)).then_some(submitted_by_raw);
 
     // Append one row per guest x event. Meal/dietary/message ride on the
     // meal-serving event rows where they're meaningful.
@@ -180,7 +187,7 @@ pub async fn rsvp_submit(
             .bind(Uuid::new_v4().to_string())
             .bind(&g.id)
             .bind(&e.id)
-            .bind(Option::<String>::None) // party-login: individual editor unknown
+            .bind(&submitted_by) // identified editor, validated against this party's guests
             .bind(attending)
             .bind(meal_id)
             .bind(dietary)
