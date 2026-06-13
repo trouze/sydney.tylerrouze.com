@@ -6,3 +6,6 @@ data/
 .env
 .env.secrets
 .env.variables
+
+# macOS
+.DS_Store

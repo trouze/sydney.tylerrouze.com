@@ -65,6 +65,14 @@ struct LoginTemplate {
 #[template(path = "admin.html")]
 struct AdminTemplate {
     parties: Vec<PartyView>,
+    /// Events offered as per-guest invitation checkboxes in the add-party form.
+    events: Vec<EventOption>,
+}
+
+/// An event id+name pair for invitation checkboxes.
+struct EventOption {
+    id: String,
+    name: String,
 }
 
 #[derive(Template)]
@@ -210,7 +218,23 @@ pub async fn dashboard(State(pool): State<AppState>, jar: CookieJar) -> Result<R
         })
         .collect();
 
-    Ok(Html(AdminTemplate { parties: party_views }.render()?).into_response())
+    let events = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, name FROM events ORDER BY sort_order",
+    )
+    .fetch_all(&pool)
+    .await?
+    .into_iter()
+    .map(|(id, name)| EventOption { id, name })
+    .collect();
+
+    Ok(Html(
+        AdminTemplate {
+            parties: party_views,
+            events,
+        }
+        .render()?,
+    )
+    .into_response())
 }
 
 // ---------- POST /admin/parties ----------
@@ -231,6 +255,9 @@ pub async fn create_party(
     let mut last_names: Vec<String> = Vec::new();
     let mut emails: Vec<String> = Vec::new();
     let mut plus_ones: Vec<bool> = Vec::new();
+    // Invitation checkboxes are positional (rows have no ids yet):
+    // name="inv:<row_index>:<event_id>". They default to checked in the form.
+    let mut invites: HashMap<usize, Vec<String>> = HashMap::new();
     for (key, value) in fields {
         match key.as_str() {
             "label" => label = value,
@@ -247,7 +274,15 @@ pub async fn create_party(
                     plus_ones[idx] = true;
                 }
             }
-            _ => {}
+            _ => {
+                if let Some(rest) = key.strip_prefix("inv:") {
+                    if let Some((idx, eid)) = rest.split_once(':') {
+                        if let Ok(idx) = idx.parse::<usize>() {
+                            invites.entry(idx).or_default().push(eid.to_string());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -259,9 +294,6 @@ pub async fn create_party(
 
     let invite_code = generate_invite_code(&pool, last_name).await?;
     let party_id = Uuid::new_v4().to_string();
-    // New guests are invited to every event by default; trim exceptions later in
-    // the per-party edit matrix.
-    let event_ids = all_event_ids(&pool).await?;
 
     let mut tx = pool.begin().await?;
     sqlx::query("INSERT INTO parties (id, invite_code, label) VALUES (?, ?, ?)")
@@ -301,7 +333,10 @@ pub async fn create_party(
         .bind(is_plus_one)
         .execute(&mut *tx)
         .await?;
-        insert_invitations(&mut tx, &guest_id, &event_ids).await?;
+        // Invite to exactly the events checked for this row.
+        if let Some(eids) = invites.get(&i) {
+            insert_invitations(&mut tx, &guest_id, eids).await?;
+        }
     }
     tx.commit().await?;
 
