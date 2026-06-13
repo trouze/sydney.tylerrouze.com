@@ -88,7 +88,21 @@ struct PartyView {
 #[template(path = "admin_edit_party.html")]
 struct EditPartyTemplate {
     party: AdminParty,
-    guests: Vec<AdminGuest>,
+    guests: Vec<EditGuestRow>,
+    /// Event names for the matrix header row.
+    event_names: Vec<String>,
+}
+
+/// A guest row in the edit-party invitation matrix.
+struct EditGuestRow {
+    g: AdminGuest,
+    /// One cell per event (aligned with `event_names`), checked = invited.
+    cells: Vec<EditEventCell>,
+}
+
+struct EditEventCell {
+    event_id: String,
+    checked: bool,
 }
 
 #[derive(Template)]
@@ -245,6 +259,9 @@ pub async fn create_party(
 
     let invite_code = generate_invite_code(&pool, last_name).await?;
     let party_id = Uuid::new_v4().to_string();
+    // New guests are invited to every event by default; trim exceptions later in
+    // the per-party edit matrix.
+    let event_ids = all_event_ids(&pool).await?;
 
     let mut tx = pool.begin().await?;
     sqlx::query("INSERT INTO parties (id, invite_code, label) VALUES (?, ?, ?)")
@@ -271,11 +288,12 @@ pub async fn create_party(
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
         let is_plus_one = plus_ones.get(i).copied().unwrap_or(false);
+        let guest_id = Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO guests (id, party_id, first_name, last_name, email, is_plus_one)
              VALUES (?, ?, ?, ?, ?, ?)",
         )
-        .bind(Uuid::new_v4().to_string())
+        .bind(&guest_id)
         .bind(&party_id)
         .bind(first)
         .bind(glast)
@@ -283,6 +301,7 @@ pub async fn create_party(
         .bind(is_plus_one)
         .execute(&mut *tx)
         .await?;
+        insert_invitations(&mut tx, &guest_id, &event_ids).await?;
     }
     tx.commit().await?;
 
@@ -317,7 +336,38 @@ pub async fn edit_party_page(
     .fetch_all(&pool)
     .await?;
 
-    Ok(Html(EditPartyTemplate { party, guests }.render()?).into_response())
+    // Events (matrix columns) + the current invitation set for this party.
+    let events = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, name FROM events ORDER BY sort_order",
+    )
+    .fetch_all(&pool)
+    .await?;
+    let invited = fetch_invitation_set(&pool, &id).await?;
+
+    let event_names = events.iter().map(|(_, name)| name.clone()).collect();
+    let guest_rows = guests
+        .into_iter()
+        .map(|g| {
+            let cells = events
+                .iter()
+                .map(|(eid, _)| EditEventCell {
+                    event_id: eid.clone(),
+                    checked: invited.contains(&(g.id.clone(), eid.clone())),
+                })
+                .collect();
+            EditGuestRow { g, cells }
+        })
+        .collect();
+
+    Ok(Html(
+        EditPartyTemplate {
+            party,
+            guests: guest_rows,
+            event_names,
+        }
+        .render()?,
+    )
+    .into_response())
 }
 
 // ---------- POST /admin/parties/:id ----------
@@ -345,6 +395,8 @@ pub async fn update_party(
     let mut new_last: Vec<String> = Vec::new();
     let mut new_email: Vec<String> = Vec::new();
     let mut new_plus: HashSet<usize> = HashSet::new();
+    // Invitation matrix checkboxes: name="inv:<guest_id>:<event_id>".
+    let mut invites: HashMap<String, Vec<String>> = HashMap::new();
     for (key, value) in fields {
         match key.as_str() {
             "label" => label = value,
@@ -365,7 +417,16 @@ pub async fn update_party(
                     new_plus.insert(i);
                 }
             }
-            _ => {}
+            _ => {
+                if let Some(rest) = key.strip_prefix("inv:") {
+                    if let Some((gid, eid)) = rest.split_once(':') {
+                        invites
+                            .entry(gid.to_string())
+                            .or_default()
+                            .push(eid.to_string());
+                    }
+                }
+            }
         }
     }
 
@@ -374,6 +435,9 @@ pub async fn update_party(
         return Ok(Redirect::to(&format!("/admin/parties/{id}/edit")).into_response());
     }
 
+    // New guests default to every event; trim them in the matrix afterward.
+    let event_ids = all_event_ids(&pool).await?;
+
     let mut tx = pool.begin().await?;
     sqlx::query("UPDATE parties SET label = ? WHERE id = ?")
         .bind(label)
@@ -381,11 +445,12 @@ pub async fn update_party(
         .execute(&mut *tx)
         .await?;
 
-    // Update each existing guest in place (scoped to this party).
+    // Update each existing guest in place (scoped to this party), and replace
+    // their invitations with whatever the matrix has checked.
     for (i, gid) in existing_ids.iter().enumerate() {
         let first = existing_first.get(i).map(|s| s.trim()).unwrap_or("");
         if first.is_empty() {
-            continue; // never blank out a name
+            continue; // never blank out a name (and leave invitations untouched)
         }
         let last = existing_last.get(i).map(|s| s.trim()).unwrap_or("");
         let email = existing_email
@@ -406,6 +471,15 @@ pub async fn update_party(
         .bind(&id)
         .execute(&mut *tx)
         .await?;
+
+        // Replace this guest's invitation set from the matrix checkboxes.
+        sqlx::query("DELETE FROM event_invitations WHERE guest_id = ?")
+            .bind(gid)
+            .execute(&mut *tx)
+            .await?;
+        if let Some(eids) = invites.get(gid) {
+            insert_invitations(&mut tx, gid, eids).await?;
+        }
     }
 
     // Insert any newly entered guests (blank first name = skip the row).
@@ -421,11 +495,12 @@ pub async fn update_party(
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
         let is_plus_one = new_plus.contains(&i);
+        let guest_id = Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO guests (id, party_id, first_name, last_name, email, is_plus_one)
              VALUES (?, ?, ?, ?, ?, ?)",
         )
-        .bind(Uuid::new_v4().to_string())
+        .bind(&guest_id)
         .bind(&id)
         .bind(first)
         .bind(last)
@@ -433,6 +508,7 @@ pub async fn update_party(
         .bind(is_plus_one)
         .execute(&mut *tx)
         .await?;
+        insert_invitations(&mut tx, &guest_id, &event_ids).await?;
     }
     tx.commit().await?;
 
@@ -783,6 +859,10 @@ struct ParsedGuest {
     last_name: String,
     email: Option<String>,
     is_plus_one: bool,
+    /// Event names this guest is invited to. `None` when the sheet has no event
+    /// columns at all (→ default to every event); `Some` (possibly empty) when
+    /// it does, naming exactly the events whose cell was truthy.
+    invited_events: Option<Vec<String>>,
 }
 
 /// A party assembled from one or more CSV rows (grouped by invite_code, else by
@@ -795,23 +875,6 @@ struct ParsedGroup {
     /// else the label).
     invite_last_name: String,
     guests: Vec<ParsedGuest>,
-}
-
-/// One CSV row. Column order doesn't matter — `csv` maps by header name. Only
-/// `party_label` is a required column; the rest default to empty when absent.
-#[derive(Debug, Deserialize)]
-struct ImportRow {
-    #[serde(default)]
-    invite_code: String,
-    party_label: String,
-    #[serde(default)]
-    first_name: String,
-    #[serde(default)]
-    last_name: String,
-    #[serde(default)]
-    email: String,
-    #[serde(default)]
-    is_plus_one: String,
 }
 
 /// Submitted by the "Confirm import" form (hidden textarea round-trips the CSV).
@@ -868,23 +931,61 @@ fn parse_import_csv(text: &str) -> Result<(Vec<ParsedGroup>, Vec<String>), Strin
         .trim(csv::Trim::All)
         .from_reader(text.as_bytes());
 
+    // Header-driven so unknown columns can be treated as per-event invitation
+    // columns (one column per event, header = event name, truthy cell = invited).
+    let headers = rdr
+        .headers()
+        .map_err(|e| format!("Couldn't read the header row. ({e})"))?
+        .clone();
+    let mut col: HashMap<String, usize> = HashMap::new();
+    for (i, h) in headers.iter().enumerate() {
+        col.entry(h.trim().to_ascii_lowercase()).or_insert(i);
+    }
+    const KNOWN: [&str; 6] = [
+        "invite_code",
+        "party_label",
+        "first_name",
+        "last_name",
+        "email",
+        "is_plus_one",
+    ];
+    if !col.contains_key("party_label") {
+        return Err("The sheet needs a \"party_label\" column.".into());
+    }
+    // Event-invitation columns: any non-empty header that isn't a known field.
+    let event_cols: Vec<(usize, String)> = headers
+        .iter()
+        .enumerate()
+        .filter_map(|(i, h)| {
+            let name = h.trim();
+            let lname = name.to_ascii_lowercase();
+            (!name.is_empty() && !KNOWN.contains(&lname.as_str())).then(|| (i, name.to_string()))
+        })
+        .collect();
+
     let mut order: Vec<String> = Vec::new();
     let mut groups: HashMap<String, ParsedGroup> = HashMap::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    for (i, result) in rdr.deserialize::<ImportRow>().enumerate() {
+    for (i, result) in rdr.records().enumerate() {
         // +2: row 1 is the header, and humans count from 1.
         let line = i + 2;
-        let row = result.map_err(|e| {
+        let rec = result.map_err(|e| {
             format!("Couldn't read row {line}. Check the columns match the header. ({e})")
         })?;
+        let field = |name: &str| -> &str {
+            col.get(name)
+                .and_then(|&ci| rec.get(ci))
+                .unwrap_or("")
+                .trim()
+        };
 
         let code = {
-            let c = row.invite_code.trim();
+            let c = field("invite_code");
             (!c.is_empty()).then(|| c.to_string())
         };
-        let label = row.party_label.trim().to_string();
-        let first = row.first_name.trim().to_string();
+        let label = field("party_label").to_string();
+        let first = field("first_name").to_string();
 
         // Fully blank line: ignore silently.
         if code.is_none() && label.is_empty() && first.is_empty() {
@@ -921,11 +1022,21 @@ fn parse_import_csv(text: &str) -> Result<(Vec<ParsedGroup>, Vec<String>), Strin
             continue;
         }
 
-        let last = row.last_name.trim().to_string();
+        let last = field("last_name").to_string();
         let email = {
-            let e = row.email.trim();
+            let e = field("email");
             (!e.is_empty()).then(|| e.to_string())
         };
+        // With event columns present, invited = the truthy ones (possibly none);
+        // without any event columns, None means "default to every event".
+        let invited_events = (!event_cols.is_empty()).then(|| {
+            event_cols
+                .iter()
+                .filter(|(ci, _)| parse_truthy(rec.get(*ci).unwrap_or("")))
+                .map(|(_, name)| name.clone())
+                .collect::<Vec<_>>()
+        });
+        let is_plus_one = parse_truthy(field("is_plus_one"));
         if group.invite_last_name.is_empty() && !last.is_empty() {
             group.invite_last_name = last.clone();
         }
@@ -933,7 +1044,8 @@ fn parse_import_csv(text: &str) -> Result<(Vec<ParsedGroup>, Vec<String>), Strin
             first_name: first,
             last_name: last,
             email,
-            is_plus_one: parse_truthy(&row.is_plus_one),
+            is_plus_one,
+            invited_events,
         });
     }
 
@@ -1026,6 +1138,28 @@ fn reconcile(
     }
 }
 
+/// Warn about event-column headers that don't match any event (only those a
+/// guest was actually marked invited under — an unused stray column is harmless).
+fn unknown_event_warnings(groups: &[ParsedGroup], known: &HashMap<String, String>) -> Vec<String> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    for g in groups {
+        for guest in &g.guests {
+            if let Some(names) = &guest.invited_events {
+                for n in names {
+                    let key = n.trim().to_ascii_lowercase();
+                    if !known.contains_key(&key) && seen.insert(key) {
+                        out.push(format!(
+                            "Column \"{n}\" doesn't match any event — those invitations were ignored."
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Load the current parties for diffing.
 async fn load_existing_parties(pool: &AppState) -> Result<Vec<ExistingParty>, AppError> {
     let rows = sqlx::query_as::<_, (String, String, String)>(
@@ -1043,8 +1177,9 @@ async fn load_existing_parties(pool: &AppState) -> Result<Vec<ExistingParty>, Ap
         .collect())
 }
 
-/// Delete a party's guests and any RSVP history pointing at them. Used both when
-/// removing a party and when replacing a kept party's guest list.
+/// Delete a party's guests plus any RSVP history and event invitations pointing
+/// at them. Used both when removing a party and when replacing a kept party's
+/// guest list. Children go before guests because SQLite enforces FKs here.
 async fn clear_party_guests(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     party_id: &str,
@@ -1058,6 +1193,13 @@ async fn clear_party_guests(
     .bind(party_id)
     .execute(&mut **tx)
     .await?;
+    sqlx::query(
+        "DELETE FROM event_invitations
+         WHERE guest_id IN (SELECT id FROM guests WHERE party_id = ?)",
+    )
+    .bind(party_id)
+    .execute(&mut **tx)
+    .await?;
     sqlx::query("DELETE FROM guests WHERE party_id = ?")
         .bind(party_id)
         .execute(&mut **tx)
@@ -1065,18 +1207,91 @@ async fn clear_party_guests(
     Ok(())
 }
 
-/// Insert the parsed guests of a party.
+/// All event ids in display order (the default "invited to everything" set).
+async fn all_event_ids(pool: &AppState) -> Result<Vec<String>, AppError> {
+    Ok(
+        sqlx::query_scalar::<_, String>("SELECT id FROM events ORDER BY sort_order")
+            .fetch_all(pool)
+            .await?,
+    )
+}
+
+/// Map of lowercased event name -> id, for resolving CSV event-column headers.
+async fn event_name_index(pool: &AppState) -> Result<HashMap<String, String>, AppError> {
+    let rows = sqlx::query_as::<_, (String, String)>("SELECT id, name FROM events")
+        .fetch_all(pool)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, name)| (name.trim().to_ascii_lowercase(), id))
+        .collect())
+}
+
+/// Current (guest_id, event_id) invitations for one party.
+async fn fetch_invitation_set(
+    pool: &AppState,
+    party_id: &str,
+) -> Result<HashSet<(String, String)>, AppError> {
+    let rows = sqlx::query_as::<_, (String, String)>(
+        "SELECT ei.guest_id, ei.event_id
+         FROM event_invitations ei
+         JOIN guests g ON g.id = ei.guest_id
+         WHERE g.party_id = ?",
+    )
+    .bind(party_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Insert invitation rows for one guest (idempotent).
+async fn insert_invitations(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    guest_id: &str,
+    event_ids: &[String],
+) -> Result<(), sqlx::Error> {
+    for eid in event_ids {
+        sqlx::query("INSERT OR IGNORE INTO event_invitations (guest_id, event_id) VALUES (?, ?)")
+            .bind(guest_id)
+            .bind(eid)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+/// Resolve a parsed guest's invited-event names to event ids. `None` (no event
+/// columns in the sheet) defaults to every event; unknown names are dropped
+/// (they're surfaced as warnings during preview/commit).
+fn resolved_invites(
+    g: &ParsedGuest,
+    name_to_id: &HashMap<String, String>,
+    all_event_ids: &[String],
+) -> Vec<String> {
+    match &g.invited_events {
+        None => all_event_ids.to_vec(),
+        Some(names) => names
+            .iter()
+            .filter_map(|n| name_to_id.get(&n.trim().to_ascii_lowercase()).cloned())
+            .collect(),
+    }
+}
+
+/// Insert the parsed guests of a party, along with their event invitations.
 async fn insert_guests(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     party_id: &str,
     guests: &[ParsedGuest],
+    name_to_id: &HashMap<String, String>,
+    all_event_ids: &[String],
 ) -> Result<(), sqlx::Error> {
     for g in guests {
+        let guest_id = Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO guests (id, party_id, first_name, last_name, email, is_plus_one)
              VALUES (?, ?, ?, ?, ?, ?)",
         )
-        .bind(Uuid::new_v4().to_string())
+        .bind(&guest_id)
         .bind(party_id)
         .bind(&g.first_name)
         .bind(&g.last_name)
@@ -1084,6 +1299,8 @@ async fn insert_guests(
         .bind(g.is_plus_one)
         .execute(&mut **tx)
         .await?;
+        let invited = resolved_invites(g, name_to_id, all_event_ids);
+        insert_invitations(tx, &guest_id, &invited).await?;
     }
     Ok(())
 }
@@ -1114,10 +1331,24 @@ pub async fn import_export(
         return Ok(Redirect::to("/admin/login").into_response());
     }
 
+    // One column per event (header = event name), so invitations round-trip
+    // through the spreadsheet. "x" in a cell = that guest is invited.
+    let events = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, name FROM events ORDER BY sort_order",
+    )
+    .fetch_all(&pool)
+    .await?;
+    let invited: HashSet<(String, String)> =
+        sqlx::query_as::<_, (String, String)>("SELECT guest_id, event_id FROM event_invitations")
+            .fetch_all(&pool)
+            .await?
+            .into_iter()
+            .collect();
+
     // LEFT JOIN so a party with no guests still emits one (code-only) row, which
     // keeps it referenced on a round-trip instead of being treated as removed.
-    let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<bool>)>(
-        "SELECT p.invite_code, p.label, g.first_name, g.last_name, g.email, g.is_plus_one
+    let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<bool>)>(
+        "SELECT p.invite_code, p.label, g.id, g.first_name, g.last_name, g.email, g.is_plus_one
          FROM parties p
          LEFT JOIN guests g ON g.party_id = p.id
          ORDER BY p.label, g.is_plus_one, g.created_at",
@@ -1126,25 +1357,39 @@ pub async fn import_export(
     .await?;
 
     let mut wtr = csv::Writer::from_writer(Vec::new());
-    wtr.write_record([
-        "invite_code",
-        "party_label",
-        "first_name",
-        "last_name",
-        "email",
-        "is_plus_one",
-    ])
-    .map_err(|e| AppError::Other(anyhow::anyhow!("csv write error: {e}")))?;
-    for (code, label, first, last, email, plus) in rows {
-        wtr.write_record([
-            code.as_str(),
-            label.as_str(),
-            first.as_deref().unwrap_or(""),
-            last.as_deref().unwrap_or(""),
-            email.as_deref().unwrap_or(""),
-            if plus.unwrap_or(false) { "yes" } else { "" },
-        ])
+    let mut header: Vec<String> = vec![
+        "invite_code".into(),
+        "party_label".into(),
+        "first_name".into(),
+        "last_name".into(),
+        "email".into(),
+        "is_plus_one".into(),
+    ];
+    header.extend(events.iter().map(|(_, name)| name.clone()));
+    wtr.write_record(&header)
         .map_err(|e| AppError::Other(anyhow::anyhow!("csv write error: {e}")))?;
+    for (code, label, gid, first, last, email, plus) in rows {
+        let mut record: Vec<String> = vec![
+            code,
+            label,
+            first.unwrap_or_default(),
+            last.unwrap_or_default(),
+            email.unwrap_or_default(),
+            if plus.unwrap_or(false) {
+                "yes".into()
+            } else {
+                String::new()
+            },
+        ];
+        for (eid, _) in &events {
+            let cell = match &gid {
+                Some(g) if invited.contains(&(g.clone(), eid.clone())) => "x",
+                _ => "",
+            };
+            record.push(cell.into());
+        }
+        wtr.write_record(&record)
+            .map_err(|e| AppError::Other(anyhow::anyhow!("csv write error: {e}")))?;
     }
     let bytes = wtr
         .into_inner()
@@ -1212,8 +1457,10 @@ pub async fn import_preview(
     let raw_csv = read_uploaded_csv(&mut multipart).await?;
 
     let template = match parse_import_csv(&raw_csv) {
-        Ok((groups, warnings)) => {
+        Ok((groups, mut warnings)) => {
             let existing = load_existing_parties(&pool).await?;
+            let name_to_id = event_name_index(&pool).await?;
+            warnings.extend(unknown_event_warnings(&groups, &name_to_id));
             let plan = reconcile(groups, existing, warnings);
             let creates = plan
                 .creates
@@ -1312,6 +1559,10 @@ async fn apply_plan(pool: &AppState, plan: ReconcilePlan) -> Result<(), AppError
         create_codes.push(code);
     }
 
+    // Event lookups for translating the sheet's event columns into invitations.
+    let name_to_id = event_name_index(pool).await?;
+    let all_ids = all_event_ids(pool).await?;
+
     let mut tx = pool.begin().await?;
 
     // Remove parties dropped from the sheet (guests + RSVP history first for FKs).
@@ -1332,7 +1583,7 @@ async fn apply_plan(pool: &AppState, plan: ReconcilePlan) -> Result<(), AppError
             .execute(&mut *tx)
             .await?;
         clear_party_guests(&mut tx, id).await?;
-        insert_guests(&mut tx, id, &u.guests).await?;
+        insert_guests(&mut tx, id, &u.guests, &name_to_id, &all_ids).await?;
     }
 
     // Create new parties with their pre-generated codes.
@@ -1344,7 +1595,7 @@ async fn apply_plan(pool: &AppState, plan: ReconcilePlan) -> Result<(), AppError
             .bind(&c.label)
             .execute(&mut *tx)
             .await?;
-        insert_guests(&mut tx, &party_id, &c.guests).await?;
+        insert_guests(&mut tx, &party_id, &c.guests, &name_to_id, &all_ids).await?;
     }
 
     tx.commit().await?;
@@ -1462,7 +1713,36 @@ mod tests {
     fn missing_required_column_errors() {
         // No party_label column at all.
         let err = parse_import_csv("invite_code,first_name\nX,John\n").unwrap_err();
-        assert!(err.contains("Couldn't read row"), "got: {err}");
+        assert!(err.contains("party_label"), "got: {err}");
+    }
+
+    #[test]
+    fn no_event_columns_leaves_invited_events_none() {
+        // Without event columns, guests default to "all events" (None).
+        let (groups, _) = parse_import_csv(
+            "party_label,first_name\nSmith,John\n",
+        )
+        .unwrap();
+        assert!(groups[0].guests[0].invited_events.is_none());
+    }
+
+    #[test]
+    fn event_columns_parse_invitations_by_truthy_cell() {
+        let csv = "party_label,first_name,Welcome Drinks,Ceremony,Reception\n\
+                   Smith,John,x,yes,\n\
+                   Smith,Kid,,1,\n";
+        let (groups, _) = parse_import_csv(csv).unwrap();
+        let g = group(&groups, "Smith");
+        // John: Welcome Drinks + Ceremony (Reception blank → not invited).
+        assert_eq!(
+            g.guests[0].invited_events.as_deref(),
+            Some(&["Welcome Drinks".to_string(), "Ceremony".to_string()][..])
+        );
+        // Kid: Ceremony only.
+        assert_eq!(
+            g.guests[1].invited_events.as_deref(),
+            Some(&["Ceremony".to_string()][..])
+        );
     }
 
     // ---------- reconcile ----------
@@ -1682,5 +1962,57 @@ mod tests {
         apply_csv(&pool, &code_only).await;
         assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Solo'").await, 1);
         assert_eq!(code_for(&pool, "Solo").await, code);
+    }
+
+    async fn invited_events_of(pool: &AppState, first: &str) -> Vec<String> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT e.name FROM event_invitations ei
+             JOIN events e ON e.id = ei.event_id
+             JOIN guests g ON g.id = ei.guest_id
+             WHERE g.first_name = ? ORDER BY e.sort_order",
+        )
+        .bind(first)
+        .fetch_all(pool)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn import_without_event_columns_invites_everyone_to_all_events() {
+        let pool = test_pool().await;
+        apply_csv(&pool, "party_label,first_name,last_name\nSmith,John,Smith\n").await;
+        let total_events = count(&pool, "SELECT COUNT(*) FROM events").await as usize;
+        assert_eq!(invited_events_of(&pool, "John").await.len(), total_events);
+    }
+
+    #[tokio::test]
+    async fn import_event_columns_set_per_guest_invitations() {
+        let pool = test_pool().await;
+        // Event columns by name; John gets two events, Kid only the Ceremony.
+        apply_csv(
+            &pool,
+            "party_label,first_name,last_name,Welcome Drinks,Ceremony,Reception\n\
+             Smith,John,Smith,x,x,\n\
+             Smith,Kid,Smith,,x,\n",
+        )
+        .await;
+        assert_eq!(
+            invited_events_of(&pool, "John").await,
+            vec!["Welcome Drinks", "Ceremony"]
+        );
+        assert_eq!(invited_events_of(&pool, "Kid").await, vec!["Ceremony"]);
+
+        // Re-importing the same sheet replaces invitations cleanly (no dupes).
+        apply_csv(
+            &pool,
+            "party_label,first_name,last_name,Welcome Drinks,Ceremony,Reception\n\
+             Smith,John,Smith,,x,x\n\
+             Smith,Kid,Smith,,x,\n",
+        )
+        .await;
+        assert_eq!(
+            invited_events_of(&pool, "John").await,
+            vec!["Ceremony", "Reception"]
+        );
     }
 }

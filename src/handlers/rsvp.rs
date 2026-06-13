@@ -45,7 +45,6 @@ struct RsvpTemplate {
     party_label: String,
     guests: Vec<GuestRow>,
     meal_options: Vec<MealOption>,
-    serves_meal: bool,
     closed: bool,
     is_editing: bool,
     last_updated: Option<String>,
@@ -57,6 +56,8 @@ struct GuestRow {
     email: String,       // current email on file, "" if none
     meal_choice: String, // selected meal_option_id, "" if none
     dietary: String,
+    /// True if this guest is invited to at least one meal-serving event.
+    serves_meal: bool,
     events: Vec<EventCell>,
 }
 
@@ -133,6 +134,7 @@ pub async fn rsvp_submit(
 
     let guests = fetch_guests(&pool, &party.id).await?;
     let events = fetch_events(&pool).await?;
+    let invited = fetch_invitations(&pool, &party.id).await?;
 
     // Did this party already have answers on file? (Check before we append.)
     let is_edit: bool = sqlx::query_scalar::<_, i64>(
@@ -215,6 +217,11 @@ pub async fn rsvp_submit(
 
     for g in &guests {
         for e in &events {
+            // Only record answers for events this guest was actually invited to;
+            // never trust a client-supplied attend pair for an uninvited event.
+            if !invited.contains(&(g.id.clone(), e.id.clone())) {
+                continue;
+            }
             let attending = attend.contains(&(g.id.clone(), e.id.clone()));
             let (meal_id, dietary, msg) = if e.serves_meal {
                 (
@@ -258,7 +265,10 @@ pub async fn rsvp_submit(
                 .unwrap_or_else(|| party.label.clone());
             let events_attending = events
                 .iter()
-                .filter(|e| attend.contains(&((*gid).clone(), e.id.clone())))
+                .filter(|e| {
+                    invited.contains(&((*gid).clone(), e.id.clone()))
+                        && attend.contains(&((*gid).clone(), e.id.clone()))
+                })
                 .map(|e| e.name.clone())
                 .collect();
             crate::listmonk::Contact {
@@ -304,6 +314,23 @@ async fn fetch_events(pool: &AppState) -> Result<Vec<Event>, AppError> {
             .fetch_all(pool)
             .await?,
     )
+}
+
+/// The set of (guest_id, event_id) this party's guests are invited to.
+async fn fetch_invitations(
+    pool: &AppState,
+    party_id: &str,
+) -> Result<HashSet<(String, String)>, AppError> {
+    let rows = sqlx::query_as::<_, (String, String)>(
+        "SELECT ei.guest_id, ei.event_id
+         FROM event_invitations ei
+         JOIN guests g ON g.id = ei.guest_id
+         WHERE g.party_id = ?",
+    )
+    .bind(party_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
 }
 
 /// Render the matrix form, pre-filled from each guest's current RSVP.
@@ -363,24 +390,37 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
         }
     }
 
-    let serves_meal = events.iter().any(|e| e.serves_meal);
+    let invited = fetch_invitations(pool, &party.id).await?;
     let closed = rsvp_closed(pool).await?;
-    let guest_rows = guests
+    // Each guest sees only the events they're invited to; a guest invited to
+    // nothing is omitted from the form entirely.
+    let guest_rows: Vec<GuestRow> = guests
         .iter()
-        .map(|g| GuestRow {
-            id: g.id.clone(),
-            name: format!("{} {}", g.first_name, g.last_name),
-            email: g.email.clone().unwrap_or_default(),
-            meal_choice: meal.get(&g.id).cloned().unwrap_or_default(),
-            dietary: diet.get(&g.id).cloned().unwrap_or_default(),
-            events: events
+        .filter_map(|g| {
+            let cells: Vec<EventCell> = events
                 .iter()
+                .filter(|e| invited.contains(&(g.id.clone(), e.id.clone())))
                 .map(|e| EventCell {
                     event_id: e.id.clone(),
                     event_name: e.name.clone(),
                     attending: attend.contains(&(g.id.clone(), e.id.clone())),
                 })
-                .collect(),
+                .collect();
+            if cells.is_empty() {
+                return None;
+            }
+            let serves_meal = events
+                .iter()
+                .any(|e| e.serves_meal && invited.contains(&(g.id.clone(), e.id.clone())));
+            Some(GuestRow {
+                id: g.id.clone(),
+                name: format!("{} {}", g.first_name, g.last_name),
+                email: g.email.clone().unwrap_or_default(),
+                meal_choice: meal.get(&g.id).cloned().unwrap_or_default(),
+                dietary: diet.get(&g.id).cloned().unwrap_or_default(),
+                serves_meal,
+                events: cells,
+            })
         })
         .collect();
 
@@ -388,7 +428,6 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
         party_label: party.label.clone(),
         guests: guest_rows,
         meal_options,
-        serves_meal,
         closed,
         is_editing,
         last_updated,

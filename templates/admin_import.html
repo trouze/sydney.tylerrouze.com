@@ -168,6 +168,7 @@
         <code class="bg-stone-100 px-1">last_name</code>, <code class="bg-stone-100 px-1">email</code>,
         <code class="bg-stone-100 px-1">is_plus_one</code> (<code class="bg-stone-100 px-1">yes</code>/<code class="bg-stone-100 px-1">1</code>/<code class="bg-stone-100 px-1">x</code>).</p>
       <p>Rows keep their <code class="bg-stone-100 px-1">invite_code</code> from the export &mdash; those parties are <strong>updated in place</strong>, so QR codes and links don't change. Leave <code class="bg-stone-100 px-1">invite_code</code> blank for a <strong>new</strong> party. Any party <strong>missing</strong> from the sheet is <strong>removed</strong>.</p>
+      <p><strong>Event invitations:</strong> the export adds one column per event (e.g. <code class="bg-stone-100 px-1">Welcome Drinks</code>, <code class="bg-stone-100 px-1">Ceremony</code>). Put <code class="bg-stone-100 px-1">x</code> (or <code class="bg-stone-100 px-1">yes</code>/<code class="bg-stone-100 px-1">1</code>) in a guest's cell to invite them to that event; leave it blank to not. A guest only sees the events they're invited to on their RSVP page. If the sheet has <em>no</em> event columns at all, everyone is invited to every event.</p>
       <p class="text-stone-400">You'll see exactly what will be added, updated, and removed before anything is saved.</p>
     </div>
     {% endif %}
