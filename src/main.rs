@@ -52,6 +52,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/admin/parties", post(handlers::admin::create_party))
         .route("/admin/meals", post(handlers::admin::save_meal))
         .route("/admin/events", post(handlers::admin::save_event))
+        .route("/admin/qr", get(handlers::qr::admin_qr_page))
+        .route("/admin/parties/:id/qr.svg", get(handlers::qr::party_qr_svg))
         // ---- end admin ----
         .nest_service("/static", ServeDir::new("static"))
         .with_state(pool)
