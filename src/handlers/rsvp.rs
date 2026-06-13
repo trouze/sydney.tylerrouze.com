@@ -47,6 +47,8 @@ struct RsvpTemplate {
     meal_options: Vec<MealOption>,
     serves_meal: bool,
     closed: bool,
+    is_editing: bool,
+    last_updated: Option<String>,
 }
 
 struct GuestRow {
@@ -131,6 +133,18 @@ pub async fn rsvp_submit(
     let guests = fetch_guests(&pool, &party.id).await?;
     let events = fetch_events(&pool).await?;
 
+    // Did this party already have answers on file? (Check before we append.)
+    let is_edit: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)
+             FROM current_rsvp cr
+             JOIN guests g ON g.id = cr.guest_id
+             WHERE g.party_id = ? AND cr.attending IS NOT NULL",
+    )
+    .bind(&party.id)
+    .fetch_one(&pool)
+    .await?
+        > 0;
+
     // Parse the dynamic form. Checkboxes use name="attend" value="guest:event";
     // selects/inputs use "meal:<guest>" / "diet:<guest>"; plus one "message".
     let mut attend: HashSet<(String, String)> = HashSet::new();
@@ -198,7 +212,11 @@ pub async fn rsvp_submit(
     }
     tx.commit().await?;
 
-    Ok(Html(confirmation_html(&party.label, !attend.is_empty())))
+    Ok(Html(confirmation_html(
+        &party.label,
+        !attend.is_empty(),
+        is_edit,
+    )))
 }
 
 // ---------- data access ----------
@@ -251,6 +269,27 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
     .fetch_all(pool)
     .await?;
 
+    // The party has responded before if any current row carries a real answer.
+    let is_editing = current
+        .iter()
+        .any(|(_, _, attending, _, _)| attending.is_some());
+
+    // Human-ish "last updated" from the most recent response in the log.
+    let last_updated: Option<String> = if is_editing {
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT MAX(cr.response_ts)
+                 FROM current_rsvp cr
+                 JOIN guests g ON g.id = cr.guest_id
+                 WHERE g.party_id = ?",
+        )
+        .bind(&party.id)
+        .fetch_optional(pool)
+        .await?
+        .flatten()
+    } else {
+        None
+    };
+
     let mut attend: HashSet<(String, String)> = HashSet::new();
     let mut meal: HashMap<String, String> = HashMap::new();
     let mut diet: HashMap<String, String> = HashMap::new();
@@ -292,20 +331,23 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
         meal_options,
         serves_meal,
         closed,
+        is_editing,
+        last_updated,
     }
     .render()?)
 }
 
 // ---------- inline HTML fragments (htmx swaps #rsvp-form) ----------
 
-fn confirmation_html(party_label: &str, attending: bool) -> String {
+fn confirmation_html(party_label: &str, attending: bool, is_edit: bool) -> String {
     let label = html_escape(party_label);
+    let saved = if is_edit { "updated" } else { "saved" };
     if attending {
         format!(
             r#"<div class="text-center py-12">
   <p class="text-5xl mb-6">&#127881;</p>
   <h3 class="font-display text-3xl text-stone-800 mb-3">We can&apos;t wait to celebrate with you!</h3>
-  <p class="text-stone-500">Thank you, {label}. Your RSVP has been saved. You can return any time before the deadline to update it.</p>
+  <p class="text-stone-500">Thank you, {label}. Your RSVP has been {saved}. You can return any time before the deadline to update it.</p>
 </div>"#
         )
     } else {
