@@ -777,7 +777,7 @@ struct PreviewRemove {
     invite_code: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ParsedGuest {
     first_name: String,
     last_name: String,
@@ -787,6 +787,7 @@ struct ParsedGuest {
 
 /// A party assembled from one or more CSV rows (grouped by invite_code, else by
 /// party_label). `invite_code` is `Some` only when the sheet carried one.
+#[derive(Debug)]
 struct ParsedGroup {
     invite_code: Option<String>,
     label: String,
@@ -1288,7 +1289,14 @@ pub async fn import_commit(
 
     let existing = load_existing_parties(&pool).await?;
     let plan = reconcile(groups, existing, warnings);
+    apply_plan(&pool, plan).await?;
 
+    Ok(Redirect::to("/admin").into_response())
+}
+
+/// Apply a reconcile plan in a single transaction: remove dropped parties,
+/// replace kept parties' guests, and create new ones.
+async fn apply_plan(pool: &AppState, plan: ReconcilePlan) -> Result<(), AppError> {
     // Pre-generate codes for new parties before opening the write transaction
     // (matches create_party). generate_invite_code reads committed rows, so it
     // already avoids kept parties' codes; the in-memory set guards against two
@@ -1296,9 +1304,9 @@ pub async fn import_commit(
     let mut used: HashSet<String> = HashSet::new();
     let mut create_codes: Vec<String> = Vec::with_capacity(plan.creates.len());
     for c in &plan.creates {
-        let mut code = generate_invite_code(&pool, &c.invite_last_name).await?;
+        let mut code = generate_invite_code(pool, &c.invite_last_name).await?;
         while used.contains(&code) {
-            code = generate_invite_code(&pool, &c.invite_last_name).await?;
+            code = generate_invite_code(pool, &c.invite_last_name).await?;
         }
         used.insert(code.clone());
         create_codes.push(code);
@@ -1340,6 +1348,339 @@ pub async fn import_commit(
     }
 
     tx.commit().await?;
+    Ok(())
+}
 
-    Ok(Redirect::to("/admin").into_response())
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+    use std::str::FromStr;
+
+    // ---------- parse_truthy ----------
+
+    #[test]
+    fn truthy_accepts_common_yes_values() {
+        for s in ["1", "true", "TRUE", "yes", "Yes", "y", "x", "+1", " yes "] {
+            assert!(parse_truthy(s), "{s:?} should be truthy");
+        }
+    }
+
+    #[test]
+    fn truthy_rejects_everything_else() {
+        for s in ["", "0", "no", "false", "n", "maybe"] {
+            assert!(!parse_truthy(s), "{s:?} should be falsy");
+        }
+    }
+
+    // ---------- parse_import_csv ----------
+
+    /// Find a parsed group by label (parse order is otherwise first-seen).
+    fn group<'a>(groups: &'a [ParsedGroup], label: &str) -> &'a ParsedGroup {
+        groups
+            .iter()
+            .find(|g| g.label == label)
+            .unwrap_or_else(|| panic!("no group labelled {label:?}"))
+    }
+
+    #[test]
+    fn empty_input_is_an_error() {
+        assert!(parse_import_csv("   \n  ").is_err());
+    }
+
+    #[test]
+    fn header_only_yields_no_groups() {
+        // A header with no data rows parses but has nothing usable.
+        let err = parse_import_csv("invite_code,party_label,first_name").unwrap_err();
+        assert!(err.contains("No usable rows"), "got: {err}");
+    }
+
+    #[test]
+    fn rows_group_by_label_and_collect_guests() {
+        let csv = "invite_code,party_label,first_name,last_name,email,is_plus_one\n\
+                   ,Smith Family,John,Smith,john@x.com,yes\n\
+                   ,Smith Family,Jane,Smith,,\n\
+                   ,Jones,Bob,Jones,,1\n";
+        let (groups, warnings) = parse_import_csv(csv).unwrap();
+        assert_eq!(groups.len(), 2);
+        assert!(warnings.is_empty());
+
+        let smith = group(&groups, "Smith Family");
+        assert!(smith.invite_code.is_none());
+        assert_eq!(smith.guests.len(), 2);
+        assert_eq!(smith.guests[0].first_name, "John");
+        assert!(smith.guests[0].is_plus_one);
+        assert_eq!(smith.guests[0].email.as_deref(), Some("john@x.com"));
+        assert!(!smith.guests[1].is_plus_one);
+        assert!(smith.guests[1].email.is_none());
+        // Invite-code prefix seeds from the first non-empty last name.
+        assert_eq!(smith.invite_last_name, "Smith");
+
+        let jones = group(&groups, "Jones");
+        assert!(jones.guests[0].is_plus_one);
+    }
+
+    #[test]
+    fn rows_sharing_a_code_merge_even_when_label_edited() {
+        // Same code, different label text on the two rows: one group, latest
+        // non-empty label wins.
+        let csv = "invite_code,party_label,first_name\n\
+                   SMITH-7Q2,Smith Family,John\n\
+                   SMITH-7Q2,The Smiths,Jane\n";
+        let (groups, _) = parse_import_csv(csv).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].invite_code.as_deref(), Some("SMITH-7Q2"));
+        assert_eq!(groups[0].label, "The Smiths");
+        assert_eq!(groups[0].guests.len(), 2);
+    }
+
+    #[test]
+    fn code_only_row_keeps_an_empty_party() {
+        // A party with no guests still registers (so it isn't treated as removed).
+        let csv = "invite_code,party_label,first_name\nEMPTY-1,Lonely Party,\n";
+        let (groups, _) = parse_import_csv(csv).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].invite_code.as_deref(), Some("EMPTY-1"));
+        assert!(groups[0].guests.is_empty());
+    }
+
+    #[test]
+    fn blank_and_anchorless_rows_are_skipped_with_warnings() {
+        let csv = "invite_code,party_label,first_name\n\
+                   ,,\n\
+                   ,,Orphan\n\
+                   ,Real,Alice\n";
+        let (groups, warnings) = parse_import_csv(csv).unwrap();
+        // Fully blank row: silent. Anchorless guest row: one warning.
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].label, "Real");
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("no party_label or invite_code"));
+    }
+
+    #[test]
+    fn missing_required_column_errors() {
+        // No party_label column at all.
+        let err = parse_import_csv("invite_code,first_name\nX,John\n").unwrap_err();
+        assert!(err.contains("Couldn't read row"), "got: {err}");
+    }
+
+    // ---------- reconcile ----------
+
+    fn existing(id: &str, code: &str, label: &str) -> ExistingParty {
+        ExistingParty {
+            id: id.into(),
+            invite_code: code.into(),
+            label: label.into(),
+        }
+    }
+
+    fn parse_only(csv: &str) -> Vec<ParsedGroup> {
+        parse_import_csv(csv).unwrap().0
+    }
+
+    #[test]
+    fn reconcile_sorts_creates_updates_removes() {
+        let groups = parse_only(
+            "invite_code,party_label,first_name\n\
+             SMITH-7Q2,Smith Family,John\n\
+             ,The Lees,Amy\n",
+        );
+        let existing = vec![
+            existing("p1", "SMITH-7Q2", "Smith Family"),
+            existing("p2", "JONES-QQ", "Jones"), // absent from sheet -> remove
+        ];
+        let plan = reconcile(groups, existing, vec![]);
+
+        assert_eq!(plan.creates.len(), 1);
+        assert_eq!(plan.creates[0].label, "The Lees");
+        assert!(plan.creates[0].invite_code.is_none());
+
+        assert_eq!(plan.updates.len(), 1);
+        assert_eq!(plan.updates[0].existing_id.as_deref(), Some("p1"));
+        assert_eq!(plan.updates[0].invite_code.as_deref(), Some("SMITH-7Q2"));
+
+        assert_eq!(plan.removes.len(), 1);
+        assert_eq!(plan.removes[0].0, "p2");
+        assert_eq!(plan.removes[0].2, "Jones");
+    }
+
+    #[test]
+    fn reconcile_unknown_code_becomes_a_create_with_warning() {
+        let groups = parse_only("invite_code,party_label,first_name\nGHOST-9,Nobody,Sue\n");
+        let plan = reconcile(groups, vec![], vec![]);
+        assert_eq!(plan.creates.len(), 1);
+        assert!(plan.creates[0].invite_code.is_none()); // fresh code, not the typed one
+        assert!(plan.warnings.iter().any(|w| w.contains("GHOST-9")));
+    }
+
+    #[test]
+    fn reconcile_blank_label_keeps_existing_name() {
+        // A code-only row (empty label) must not blank out the party name.
+        let groups = parse_only("invite_code,party_label,first_name\nSMITH-7Q2,,\n");
+        let plan = reconcile(groups, vec![existing("p1", "SMITH-7Q2", "Smith Family")], vec![]);
+        assert_eq!(plan.updates.len(), 1);
+        assert_eq!(plan.updates[0].label, "Smith Family");
+        assert!(plan.removes.is_empty());
+    }
+
+    // ---------- apply_plan (in-memory DB) ----------
+
+    async fn test_pool() -> AppState {
+        // foreign_keys(true) mirrors production so the FK-safe deletion path is
+        // actually exercised; max_connections(1) keeps the in-memory DB stable.
+        let opts = SqliteConnectOptions::from_str("sqlite::memory:")
+            .unwrap()
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    /// Full parse → reconcile → apply against the live pool, as import_commit does.
+    async fn apply_csv(pool: &AppState, csv: &str) {
+        let (groups, warnings) = parse_import_csv(csv).unwrap();
+        let existing = load_existing_parties(pool).await.unwrap();
+        let plan = reconcile(groups, existing, warnings);
+        apply_plan(pool, plan).await.unwrap();
+    }
+
+    async fn code_for(pool: &AppState, label: &str) -> String {
+        sqlx::query_scalar::<_, String>("SELECT invite_code FROM parties WHERE label = ?")
+            .bind(label)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    async fn count(pool: &AppState, sql: &str) -> i64 {
+        sqlx::query_scalar::<_, i64>(sql).fetch_one(pool).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn commit_creates_then_roundtrip_updates_creates_and_removes() {
+        let pool = test_pool().await;
+
+        // Seed two parties (all creates).
+        apply_csv(
+            &pool,
+            "invite_code,party_label,first_name,last_name,is_plus_one\n\
+             ,Smith Family,John,Smith,yes\n\
+             ,Smith Family,Jane,Smith,\n\
+             ,Jones,Bob,Jones,1\n",
+        )
+        .await;
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties").await, 2);
+        let smith_code = code_for(&pool, "Smith Family").await;
+
+        // Attach an RSVP to a Jones guest so removal must clear rsvp_history (FK).
+        let jones_guest: String = sqlx::query_scalar(
+            "SELECT g.id FROM guests g JOIN parties p ON p.id = g.party_id WHERE p.label = 'Jones'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let event: String = sqlx::query_scalar("SELECT id FROM events LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO rsvp_history (id, guest_id, event_id, attending, submitted_by)
+             VALUES (?, ?, ?, 1, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(&jones_guest)
+        .bind(&event)
+        .bind(&jones_guest)
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM rsvp_history").await, 1);
+
+        // Edited sheet: keep Smith (by code, Jane->Janet + add Tim), add The Lees,
+        // drop Jones.
+        let edited = format!(
+            "invite_code,party_label,first_name,last_name,email,is_plus_one\n\
+             {smith_code},Smith Family,John,Smith,,yes\n\
+             {smith_code},Smith Family,Janet,Smith,janet@x.com,\n\
+             {smith_code},Smith Family,Tim,Smith,,1\n\
+             ,The Lees,Amy,Lee,,\n"
+        );
+        apply_csv(&pool, &edited).await;
+
+        // Smith updated in place: same code, new guest list.
+        assert_eq!(code_for(&pool, "Smith Family").await, smith_code);
+        let smith_firsts: Vec<String> = sqlx::query_scalar(
+            "SELECT g.first_name FROM guests g JOIN parties p ON p.id = g.party_id
+             WHERE p.label = 'Smith Family' ORDER BY g.first_name",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(smith_firsts, vec!["Janet", "John", "Tim"]);
+
+        // The Lees created; Jones gone with its RSVP; no orphaned guests.
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties").await, 2);
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'The Lees'").await, 1);
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Jones'").await, 0);
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM rsvp_history").await, 0);
+        assert_eq!(
+            count(
+                &pool,
+                "SELECT COUNT(*) FROM guests WHERE party_id NOT IN (SELECT id FROM parties)"
+            )
+            .await,
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn reuploading_an_unchanged_export_is_a_noop() {
+        let pool = test_pool().await;
+        apply_csv(
+            &pool,
+            "invite_code,party_label,first_name,last_name\n,Smith Family,John,Smith\n",
+        )
+        .await;
+        let code = code_for(&pool, "Smith Family").await;
+
+        // Re-upload the export verbatim, twice.
+        let export = format!(
+            "invite_code,party_label,first_name,last_name,email,is_plus_one\n\
+             {code},Smith Family,John,Smith,,\n"
+        );
+        apply_csv(&pool, &export).await;
+        apply_csv(&pool, &export).await;
+
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties").await, 1);
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM guests").await, 1);
+        assert_eq!(code_for(&pool, "Smith Family").await, code);
+    }
+
+    #[tokio::test]
+    async fn empty_party_survives_a_roundtrip() {
+        let pool = test_pool().await;
+        // Create a party with a guest, then export-shaped re-upload as code-only
+        // (guest removed in the sheet) keeps the party but empties it — and a
+        // second identical upload is stable.
+        apply_csv(
+            &pool,
+            "invite_code,party_label,first_name,last_name\n,Solo,Pat,Solo\n",
+        )
+        .await;
+        let code = code_for(&pool, "Solo").await;
+
+        let code_only = format!("invite_code,party_label,first_name\n{code},Solo,\n");
+        apply_csv(&pool, &code_only).await;
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Solo'").await, 1);
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM guests").await, 0);
+
+        apply_csv(&pool, &code_only).await;
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Solo'").await, 1);
+        assert_eq!(code_for(&pool, "Solo").await, code);
+    }
 }
