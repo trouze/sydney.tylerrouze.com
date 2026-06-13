@@ -29,12 +29,49 @@ ssh exe.dev ls --json | jq -r '.vms[0].vm_name'
 # e.g. "sydney-tylerrouze-com" → VM SSH host is sydney-tylerrouze-com.exe.xyz
 ```
 
-**4. Add GitHub Actions secrets** (`Settings → Secrets and variables → Actions`):
+**4. Add GitHub Actions secrets and variables** (`Settings → Secrets and variables → Actions`):
+
+App config is the source of truth in GitHub: each deploy rewrites
+`/home/exedev/sydney.tylerrouze.com/wedding.env` on the VM from these, and the
+systemd unit reads it. A value left unset is simply omitted (the app uses its
+default; the listmonk sync stays off unless URL+USER+TOKEN are all present).
 
 | Secret | Value |
 |--------|-------|
 | `DEPLOY_SSH_KEY` | Contents of `~/.ssh/wedding_deploy` |
 | `VM_NAME` | Your VM name (e.g. `sydney-tylerrouze-com`) |
+| `ADMIN_TOKEN` | Admin dashboard password |
+| `LISTMONK_TOKEN` | listmonk API access token |
+
+| Variable | Value |
+|----------|-------|
+| `LISTMONK_URL` | e.g. `https://mailing.tylerrouze.com` |
+| `LISTMONK_USER` | listmonk API username |
+| `LISTMONK_LIST_ID` | Target list id (defaults to `4` in-app) |
+| `DATABASE_URL` | Optional; defaults to `sqlite:data/wedding.db` |
+| `RESET_DB` | `true` to wipe the DB pre-launch (see deploy.yml) |
+
+> Because the deploy recreates `wedding.env`, anything you previously set by hand
+> on the VM (e.g. `ADMIN_TOKEN`) must be added here, or it'll be dropped on the
+> next deploy.
+
+Set the app config from the template files (each `*.example` lists every key —
+copy, fill in real values, and push). The filled files are gitignored:
+
+```bash
+cp .env.secrets.example   .env.secrets      # ADMIN_TOKEN, LISTMONK_TOKEN
+cp .env.variables.example .env.variables    # LISTMONK_URL, LISTMONK_USER, ...
+# edit both, then:
+gh secret set   -f .env.secrets
+gh variable set -f .env.variables
+```
+
+`DEPLOY_SSH_KEY` (multi-line) and `VM_NAME` are one-offs, set them directly:
+
+```bash
+gh secret set DEPLOY_SSH_KEY < ~/.ssh/wedding_deploy
+gh secret set VM_NAME --body "sydney-tylerrouze-com"
+```
 
 **5. Run the setup script on first VM boot:**
 ```bash

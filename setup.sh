@@ -29,7 +29,11 @@ User=exedev
 WorkingDirectory=/home/exedev/sydney.tylerrouze.com
 ExecStart=/home/exedev/sydney.tylerrouze.com/target/release/wedding-rsvp
 Restart=on-failure
-Environment=DATABASE_URL=sqlite:data/wedding.db
+# App config (ADMIN_TOKEN, LISTMONK_*, optional DATABASE_URL) is written here by
+# the deploy workflow from GitHub Secrets/Variables. Leading '-' = optional, so a
+# fresh VM still boots before the first deploy creates the file. DATABASE_URL
+# defaults to sqlite:data/wedding.db in-app when unset.
+EnvironmentFile=-/home/exedev/sydney.tylerrouze.com/wedding.env
 Environment=RUST_LOG=wedding_rsvp=info,tower_http=info
 
 [Install]
