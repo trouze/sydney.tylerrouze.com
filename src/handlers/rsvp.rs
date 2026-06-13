@@ -15,6 +15,19 @@ use crate::{
 
 const INVITE_COOKIE: &str = "invite";
 
+/// RSVPs are rejected on or after this date (ISO-8601).
+const RSVP_CUTOFF: &str = "2028-01-01";
+
+/// Returns true when the RSVP window has closed (current date >= cutoff).
+/// Uses SQLite's `date('now')` so no extra date crate is required.
+async fn rsvp_closed(pool: &AppState) -> Result<bool, AppError> {
+    let closed: bool = sqlx::query_scalar("SELECT date('now') >= ?1")
+        .bind(RSVP_CUTOFF)
+        .fetch_one(pool)
+        .await?;
+    Ok(closed)
+}
+
 /// A row of current RSVP state: (guest_id, event_id, attending, meal_option_id, dietary_notes).
 type CurrentRow = (String, String, Option<bool>, Option<String>, Option<String>);
 
@@ -33,6 +46,7 @@ struct RsvpTemplate {
     guests: Vec<GuestRow>,
     meal_options: Vec<MealOption>,
     serves_meal: bool,
+    closed: bool,
 }
 
 struct GuestRow {
@@ -99,6 +113,11 @@ pub async fn rsvp_submit(
     jar: CookieJar,
     Form(fields): Form<Vec<(String, String)>>,
 ) -> Result<Html<String>, AppError> {
+    // No writes once the RSVP window has closed.
+    if rsvp_closed(&pool).await? {
+        return Ok(Html(rsvp_closed_html()));
+    }
+
     // Re-validate the party from the cookie on every write -- never trust the
     // client to tell us which party it is.
     let party = match jar.get(INVITE_COOKIE).map(|c| c.value().to_string()) {
@@ -241,6 +260,7 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
     }
 
     let serves_meal = events.iter().any(|e| e.serves_meal);
+    let closed = rsvp_closed(pool).await?;
     let guest_rows = guests
         .iter()
         .map(|g| GuestRow {
@@ -264,6 +284,7 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
         guests: guest_rows,
         meal_options,
         serves_meal,
+        closed,
     }
     .render()?)
 }
@@ -289,6 +310,15 @@ fn confirmation_html(party_label: &str, attending: bool) -> String {
 </div>"#
         )
     }
+}
+
+fn rsvp_closed_html() -> String {
+    r#"<div class="text-center py-12">
+  <p class="text-5xl mb-6">&#128591;</p>
+  <h3 class="font-display text-3xl text-stone-800 mb-3">RSVPs are now closed</h3>
+  <p class="text-stone-500">Please reach out to the couple directly and we&apos;ll do our best to accommodate you.</p>
+</div>"#
+        .to_string()
 }
 
 fn session_expired_html() -> String {
