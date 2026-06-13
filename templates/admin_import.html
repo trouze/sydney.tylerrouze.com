@@ -35,28 +35,43 @@
     {% if let Some(p) = preview %}
     <!-- ============ PREVIEW / CONFIRM ============ -->
     <div class="border border-stone-200 bg-white p-5 mb-8">
-      <h2 class="font-display text-3xl text-stone-800 mb-2">Ready to import</h2>
+      <h2 class="font-display text-3xl text-stone-800 mb-2">Review changes</h2>
       <p class="text-sm text-stone-600 mb-6">
-        <strong>{{ p.total_parties }}</strong> {% if p.total_parties == 1 %}party{% else %}parties{% endif %}
-        and <strong>{{ p.total_guests }}</strong> {% if p.total_guests == 1 %}guest{% else %}guests{% endif %}.
+        <span class="text-emerald-700 font-medium">{{ p.creates.len() }} to add</span>,
+        <span class="text-stone-700 font-medium">{{ p.updates.len() }} to update</span>,
+        <span class="text-red-700 font-medium">{{ p.removes.len() }} to remove</span>.
         Nothing has been saved yet.
       </p>
 
       {% if !p.warnings.is_empty() %}
       <div class="border border-amber-200 bg-amber-50 text-amber-800 text-sm p-4 mb-6">
-        <p class="font-medium mb-1">{{ p.warnings.len() }} row(s) will be skipped:</p>
+        <p class="font-medium mb-1">{{ p.warnings.len() }} note(s):</p>
         <ul class="list-disc list-inside space-y-0.5">
           {% for w in p.warnings %}<li>{{ w }}</li>{% endfor %}
         </ul>
       </div>
       {% endif %}
 
-      <div class="space-y-4 mb-8">
-        {% for party in p.parties %}
+      {% if !p.removes.is_empty() %}
+      <div class="border border-red-300 bg-red-50 p-4 mb-6">
+        <p class="text-xs tracking-widest uppercase text-red-700 font-medium mb-2">Will be permanently removed</p>
+        <ul class="text-sm text-red-800 space-y-1">
+          {% for r in p.removes %}
+          <li>{{ r.label }} <code class="text-xs bg-red-100 px-1">{{ r.invite_code }}</code></li>
+          {% endfor %}
+        </ul>
+        <p class="text-xs text-red-600 mt-2">These parties aren't in the uploaded sheet. Their guests and any RSVPs go too.</p>
+      </div>
+      {% endif %}
+
+      {% if !p.creates.is_empty() %}
+      <p class="text-xs tracking-widest uppercase text-emerald-700 mb-2">Add</p>
+      <div class="space-y-3 mb-6">
+        {% for party in p.creates %}
         <div class="border border-stone-200 p-4">
           <div class="flex items-baseline justify-between gap-3">
             <h3 class="font-display text-2xl text-stone-800">{{ party.label }}</h3>
-            <span class="text-xs tracking-widest uppercase text-stone-400">code from: {{ party.invite_last_name }}</span>
+            <span class="text-xs tracking-widest uppercase text-stone-400">{{ party.code }}</span>
           </div>
           <ul class="mt-2 space-y-1 text-sm text-stone-600">
             {% for g in party.guests %}
@@ -70,6 +85,30 @@
         </div>
         {% endfor %}
       </div>
+      {% endif %}
+
+      {% if !p.updates.is_empty() %}
+      <p class="text-xs tracking-widest uppercase text-stone-500 mb-2">Update</p>
+      <div class="space-y-3 mb-8">
+        {% for party in p.updates %}
+        <div class="border border-stone-200 p-4">
+          <div class="flex items-baseline justify-between gap-3">
+            <h3 class="font-display text-2xl text-stone-800">{{ party.label }}</h3>
+            <code class="text-xs tracking-[0.2em] uppercase text-stone-500 bg-stone-100 px-2 py-1">{{ party.code }}</code>
+          </div>
+          <ul class="mt-2 space-y-1 text-sm text-stone-600">
+            {% for g in party.guests %}
+            <li>
+              {{ g.first_name }} {{ g.last_name }}
+              {% if g.is_plus_one %}<span class="text-xs text-stone-400 uppercase tracking-widest">+1</span>{% endif %}
+              {% if let Some(email) = g.email %}<span class="text-stone-400">&middot; {{ email }}</span>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
 
       <div class="flex items-center gap-4">
         <form method="post" action="/admin/import">
@@ -85,9 +124,21 @@
       </div>
     </div>
     {% else %}
+    <!-- ============ EXPORT ============ -->
+    <div class="border border-stone-200 bg-white p-5 mb-8 flex items-center justify-between gap-4">
+      <div>
+        <h3 class="text-xs tracking-widest uppercase text-stone-500 mb-1">Start from the current list</h3>
+        <p class="text-sm text-stone-500">Download the guest list, edit it in your spreadsheet, then upload it below.</p>
+      </div>
+      <a href="/admin/import/export" download="guest-list.csv"
+        class="shrink-0 py-3 px-6 text-xs tracking-widest uppercase border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white transition-colors">
+        Download CSV
+      </a>
+    </div>
+
     <!-- ============ UPLOAD / PASTE ============ -->
     <div class="border border-stone-200 bg-stone-50 p-5 mb-8">
-      <h3 class="text-xs tracking-widest uppercase text-stone-500 mb-4">Upload a CSV or paste rows</h3>
+      <h3 class="text-xs tracking-widest uppercase text-stone-500 mb-4">Upload the edited list</h3>
       <form method="post" action="/admin/import/preview" enctype="multipart/form-data" class="space-y-6">
         <div>
           <label class="block text-xs tracking-widest uppercase text-stone-400 mb-2">CSV file</label>
@@ -99,23 +150,25 @@
 
         <div>
           <label class="block text-xs tracking-widest uppercase text-stone-400 mb-2">Paste CSV</label>
-          <textarea name="pasted" rows="8" placeholder="party_label,first_name,last_name,email,is_plus_one&#10;Smith Family,John,Smith,john@example.com,&#10;Smith Family,Jane,Smith,,"
+          <textarea name="pasted" rows="8" placeholder="invite_code,party_label,first_name,last_name,email,is_plus_one&#10;SMITH-7Q2,Smith Family,John,Smith,john@example.com,yes&#10;SMITH-7Q2,Smith Family,Jane,Smith,,&#10;,Doe,Alice,Doe,,1"
             class="w-full border border-stone-300 bg-white p-3 text-sm font-mono text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600"></textarea>
         </div>
 
         <button type="submit"
           class="py-3 px-8 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors">
-          Preview
+          Preview Changes
         </button>
       </form>
     </div>
 
     <div class="text-sm text-stone-500 space-y-2">
-      <p class="text-xs tracking-widest uppercase text-stone-400">CSV format</p>
-      <p>First row must be the header. Required columns: <code class="bg-stone-100 px-1">party_label</code> and <code class="bg-stone-100 px-1">first_name</code>.
-        Optional: <code class="bg-stone-100 px-1">last_name</code>, <code class="bg-stone-100 px-1">email</code>, <code class="bg-stone-100 px-1">is_plus_one</code> (use <code class="bg-stone-100 px-1">yes</code>/<code class="bg-stone-100 px-1">1</code>/<code class="bg-stone-100 px-1">x</code>).</p>
-      <p>Rows sharing the same <code class="bg-stone-100 px-1">party_label</code> become one party. The invite code is generated from the first guest's last name.</p>
-      <p class="text-stone-400">Each preview &rarr; confirm always creates new parties, so importing the same file twice makes duplicates.</p>
+      <p class="text-xs tracking-widest uppercase text-stone-400">How it works</p>
+      <p>The uploaded sheet becomes the complete guest list. Required column: <code class="bg-stone-100 px-1">party_label</code>.
+        Optional: <code class="bg-stone-100 px-1">invite_code</code>, <code class="bg-stone-100 px-1">first_name</code>,
+        <code class="bg-stone-100 px-1">last_name</code>, <code class="bg-stone-100 px-1">email</code>,
+        <code class="bg-stone-100 px-1">is_plus_one</code> (<code class="bg-stone-100 px-1">yes</code>/<code class="bg-stone-100 px-1">1</code>/<code class="bg-stone-100 px-1">x</code>).</p>
+      <p>Rows keep their <code class="bg-stone-100 px-1">invite_code</code> from the export &mdash; those parties are <strong>updated in place</strong>, so QR codes and links don't change. Leave <code class="bg-stone-100 px-1">invite_code</code> blank for a <strong>new</strong> party. Any party <strong>missing</strong> from the sheet is <strong>removed</strong>.</p>
+      <p class="text-stone-400">You'll see exactly what will be added, updated, and removed before anything is saved.</p>
     </div>
     {% endif %}
 
