@@ -36,14 +36,20 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan "${{ secrets.VM_NAME }}.exe.xyz" >> ~/.ssh/known_hosts 2>/dev/null
 
+      # Copy to a temp name then atomically mv into place. You can't scp directly
+      # over the running binary -- Linux returns ETXTBSY ("Text file busy") for a
+      # write to an executable that's currently mapped by the live service. `mv`
+      # only swaps the directory entry, so the running process keeps its old
+      # inode until the restart step picks up the new one.
       - name: Copy binary
         env:
           SSH_OPTS: -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no
           VM: exedev@${{ secrets.VM_NAME }}.exe.xyz
+          DIR: /home/exedev/sydney.tylerrouze.com/target/release
         run: |
-          ssh $SSH_OPTS $VM "mkdir -p /home/exedev/sydney.tylerrouze.com/target/release"
-          scp $SSH_OPTS target/release/wedding-rsvp \
-            $VM:/home/exedev/sydney.tylerrouze.com/target/release/wedding-rsvp
+          ssh $SSH_OPTS $VM "mkdir -p '$DIR'"
+          scp $SSH_OPTS target/release/wedding-rsvp "$VM:$DIR/wedding-rsvp.new"
+          ssh $SSH_OPTS $VM "mv -f '$DIR/wedding-rsvp.new' '$DIR/wedding-rsvp'"
 
       # Static assets (favicons, images, manifest) are served at runtime from the
       # `static/` dir relative to the service's WorkingDirectory -- they are NOT
