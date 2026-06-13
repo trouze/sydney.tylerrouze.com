@@ -11,6 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod db;
 mod error;
 mod handlers;
+mod listmonk;
 mod models;
 
 pub type AppState = sqlx::SqlitePool;

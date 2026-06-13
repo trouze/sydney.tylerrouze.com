@@ -51,3 +51,18 @@ For local testing of the admin flow before any of this:
 ADMIN_TOKEN=devtoken COOKIE_INSECURE=1 cargo run
 ```
 # visit http://localhost:8080/admin/login, password: devtoken
+
+## Mailing list (listmonk)
+
+When a guest RSVPs and provides an email, we add them (best-effort, in the
+background) to a listmonk list. New subscribers are created pre-confirmed; ones
+that already exist are added to the list without disturbing their other
+subscriptions. Configure via env vars — if any of URL/USER/TOKEN is unset the
+integration is disabled (so dev and tests never call out):
+
+| Var | Notes |
+| --- | --- |
+| `LISTMONK_URL` | Base URL, e.g. `https://mailing.tylerrouze.com` |
+| `LISTMONK_USER` | API username |
+| `LISTMONK_TOKEN` | API access token |
+| `LISTMONK_LIST_ID` | Target list id (defaults to `4`) |

@@ -244,6 +244,32 @@ pub async fn rsvp_submit(
     }
     tx.commit().await?;
 
+    // Best-effort: add each supplied contact to the wedding mailing list, tagged
+    // with the events that guest is attending. Runs in the background and never
+    // affects this response (see listmonk::sync_contacts).
+    let contacts: Vec<crate::listmonk::Contact> = emails
+        .iter()
+        .map(|(gid, addr)| {
+            let name = guests
+                .iter()
+                .find(|g| &g.id == *gid)
+                .map(|g| format!("{} {}", g.first_name, g.last_name).trim().to_string())
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| party.label.clone());
+            let events_attending = events
+                .iter()
+                .filter(|e| attend.contains(&((*gid).clone(), e.id.clone())))
+                .map(|e| e.name.clone())
+                .collect();
+            crate::listmonk::Contact {
+                name,
+                email: (*addr).clone(),
+                events_attending,
+            }
+        })
+        .collect();
+    crate::listmonk::sync_contacts(contacts);
+
     Ok(Html(confirmation_html(
         &party.label,
         !attend.is_empty(),
