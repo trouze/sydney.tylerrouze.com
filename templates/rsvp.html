@@ -14,6 +14,15 @@
       <p class="text-stone-400 text-xs mt-2">Kindly reply by January 1, 2028 — you can update your answers any time before then.</p>
     </div>
 
+    {% if is_editing %}
+    <div class="border border-stone-300 bg-stone-50 rounded-sm px-5 py-4 mb-12 text-center">
+      <p class="text-sm text-stone-600">You&apos;ve already responded — you&apos;re editing your previous answers.</p>
+      {% if let Some(t) = last_updated %}
+      <p class="text-xs text-stone-400 mt-1">Last updated {{ t }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div id="rsvp-form">
       <form hx-post="/rsvp" hx-target="#rsvp-form" hx-swap="outerHTML" class="space-y-12">
 
@@ -97,7 +106,7 @@
             type="submit"
             class="w-full py-4 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors"
           >
-            Send RSVP
+            {% if is_editing %}Update RSVP{% else %}Send RSVP{% endif %}
           </button>
           {% endif %}
         </div>
