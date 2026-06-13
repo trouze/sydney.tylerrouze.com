@@ -46,3 +46,8 @@ ssh exedev@<vm-name>.exe.xyz 'bash -s' < setup.sh
 ```bash
 DATABASE_URL=sqlite:data/wedding.db RUST_LOG=debug cargo run
 ```
+For local testing of the admin flow before any of this:
+```
+ADMIN_TOKEN=devtoken COOKIE_INSECURE=1 cargo run
+```
+# visit http://localhost:8080/admin/login, password: devtoken

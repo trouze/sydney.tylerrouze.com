@@ -1,4 +1,6 @@
 use axum::{
+    http::{StatusCode, Uri},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Router,
 };
@@ -49,13 +51,26 @@ async fn main() -> anyhow::Result<()> {
         .route("/admin", get(handlers::admin::dashboard))
         .route("/admin/login", get(handlers::admin::login_page))
         .route("/admin/login", post(handlers::admin::login_submit))
+        .route("/admin/logout", post(handlers::admin::logout))
+        .route("/admin/analytics", get(handlers::admin::analytics))
         .route("/admin/parties", post(handlers::admin::create_party))
-        .route("/admin/meals", post(handlers::admin::save_meal))
-        .route("/admin/events", post(handlers::admin::save_event))
-        .route("/admin/qr", get(handlers::qr::admin_qr_page))
+        .route(
+            "/admin/parties/:id/edit",
+            get(handlers::admin::edit_party_page),
+        )
+        .route("/admin/parties/:id", post(handlers::admin::update_party))
+        .route("/admin/import", get(handlers::admin::import_page).post(handlers::admin::import_commit))
+        .route("/admin/import/export", get(handlers::admin::import_export))
+        .route("/admin/import/preview", post(handlers::admin::import_preview))
+        .route("/admin/meals", get(handlers::admin::meals_page).post(handlers::admin::save_meal))
+        .route("/admin/events", get(handlers::admin::events_page).post(handlers::admin::save_event))
+        .route("/admin/qr/all.zip", get(handlers::qr::download_all_qr_zip))
         .route("/admin/parties/:id/qr.svg", get(handlers::qr::party_qr_svg))
         // ---- end admin ----
         .nest_service("/static", ServeDir::new("static"))
+        // axum 0.7 does not auto-redirect trailing slashes, so `/admin/` would
+        // 404. Bounce any unmatched `/path/` to `/path` before giving up.
+        .fallback(trailing_slash_redirect)
         .with_state(pool)
         .layer(TraceLayer::new_for_http());
 
@@ -66,4 +81,20 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Redirect `/some/path/` -> `/some/path` (preserving the query string) for any
+/// route that didn't otherwise match; everything else is a genuine 404.
+async fn trailing_slash_redirect(uri: Uri) -> Response {
+    let path = uri.path();
+    if path.len() > 1 {
+        if let Some(trimmed) = path.strip_suffix('/') {
+            let target = match uri.query() {
+                Some(q) => format!("{trimmed}?{q}"),
+                None => trimmed.to_string(),
+            };
+            return Redirect::permanent(&target).into_response();
+        }
+    }
+    StatusCode::NOT_FOUND.into_response()
 }

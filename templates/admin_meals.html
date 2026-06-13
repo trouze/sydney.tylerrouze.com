@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Meal Options{% endblock %}
+
+{% block content %}
+<section class="py-20 px-6">
+  <div class="max-w-4xl mx-auto">
+
+    <div class="flex justify-between items-center mb-2">
+      <nav class="flex gap-6 text-xs tracking-widest uppercase">
+        <a href="/admin" class="text-stone-400 hover:text-stone-700 transition-colors">Parties</a>
+        <span class="text-stone-800 border-b border-stone-800 pb-1">Meals</span>
+        <a href="/admin/events" class="text-stone-400 hover:text-stone-700 transition-colors">Events</a>
+        <a href="/admin/analytics" class="text-stone-400 hover:text-stone-700 transition-colors">Analytics</a>
+        <a href="/admin/import" class="text-stone-400 hover:text-stone-700 transition-colors">Import</a>
+      </nav>
+      <form method="post" action="/admin/logout">
+        <button type="submit"
+          class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">
+          Log out
+        </button>
+      </form>
+    </div>
+
+    <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-4 text-center">Couple Only</p>
+    <h1 class="font-display text-6xl text-stone-800 text-center">Meal Options</h1>
+    <div class="w-12 h-px bg-stone-300 mx-auto mt-8 mb-16"></div>
+
+    <!-- ============ MEAL OPTIONS ============ -->
+    <div class="space-y-3 mb-8">
+      {% for m in meal_options %}
+      <form method="post" action="/admin/meals" class="border border-stone-200 bg-white p-4 flex flex-wrap items-center gap-4">
+        <input type="hidden" name="action" value="update" />
+        <input type="hidden" name="id" value="{{ m.id }}" />
+        <span class="font-display text-xl text-stone-800 flex-1 min-w-[8rem]">{{ m.label }}</span>
+        <label class="text-sm text-stone-500 flex items-center gap-2">
+          <input type="checkbox" name="is_active" {% if m.is_active %}checked{% endif %} /> Active
+        </label>
+        <label class="text-sm text-stone-500 flex items-center gap-2">
+          Order
+          <input type="number" name="sort_order" value="{{ m.sort_order }}"
+            class="w-16 border-b border-stone-300 bg-transparent pb-1 text-sm text-stone-800 focus:outline-none focus:border-stone-600" />
+        </label>
+        <button type="submit"
+          class="py-2 px-5 text-xs tracking-widest uppercase border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white transition-colors">
+          Save
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+
+    <div class="border border-stone-200 bg-stone-50 p-5">
+      <h3 class="text-xs tracking-widest uppercase text-stone-500 mb-4">Add a Meal Option</h3>
+      <form method="post" action="/admin/meals" class="flex flex-wrap items-end gap-4">
+        <input type="hidden" name="action" value="add" />
+        <div class="flex-1 min-w-[10rem]">
+          <label class="block text-xs tracking-widest uppercase text-stone-400 mb-2">Label</label>
+          <input type="text" name="label" required placeholder="Filet Mignon"
+            class="w-full border-b border-stone-300 bg-transparent pb-2 text-sm text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600" />
+        </div>
+        <label class="text-sm text-stone-500 flex items-center gap-2 pb-2">
+          <input type="checkbox" name="is_active" checked /> Active
+        </label>
+        <label class="text-sm text-stone-500 flex items-center gap-2 pb-2">
+          Order
+          <input type="number" name="sort_order" value="0"
+            class="w-16 border-b border-stone-300 bg-transparent pb-1 text-sm text-stone-800 focus:outline-none focus:border-stone-600" />
+        </label>
+        <button type="submit"
+          class="py-3 px-8 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors">
+          Add
+        </button>
+      </form>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

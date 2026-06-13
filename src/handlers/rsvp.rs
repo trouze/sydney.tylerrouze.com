@@ -54,6 +54,7 @@ struct RsvpTemplate {
 struct GuestRow {
     id: String,
     name: String,
+    email: String,       // current email on file, "" if none
     meal_choice: String, // selected meal_option_id, "" if none
     dietary: String,
     events: Vec<EventCell>,
@@ -150,6 +151,7 @@ pub async fn rsvp_submit(
     let mut attend: HashSet<(String, String)> = HashSet::new();
     let mut meal: HashMap<String, String> = HashMap::new();
     let mut diet: HashMap<String, String> = HashMap::new();
+    let mut email: HashMap<String, String> = HashMap::new();
     let mut message = String::new();
     let mut submitted_by_raw = String::new();
     for (key, value) in fields {
@@ -165,6 +167,10 @@ pub async fn rsvp_submit(
             if !value.trim().is_empty() {
                 diet.insert(g.to_string(), value);
             }
+        } else if let Some(g) = key.strip_prefix("email:") {
+            if !value.trim().is_empty() {
+                email.insert(g.to_string(), value.trim().to_string());
+            }
         } else if key == "message" {
             message = value;
         } else if key == "submitted_by" {
@@ -174,6 +180,20 @@ pub async fn rsvp_submit(
     let message = message.trim();
     let message = (!message.is_empty()).then(|| message.to_string());
 
+    // We require at least one contact email for the party, and every email
+    // supplied must look like an address. Keep only emails for this party's
+    // guests (never trust client-supplied ids).
+    let emails: Vec<(&String, &String)> = email
+        .iter()
+        .filter(|(gid, _)| guests.iter().any(|g| &g.id == *gid))
+        .collect();
+    if emails.is_empty() {
+        return Ok(Html(email_required_html()));
+    }
+    if emails.iter().any(|(_, e)| !e.contains('@')) {
+        return Ok(Html(email_required_html()));
+    }
+
     // Only trust submitted_by if it identifies one of THIS party's guests.
     let submitted_by =
         (guests.iter().any(|g| g.id == submitted_by_raw)).then_some(submitted_by_raw);
@@ -181,6 +201,18 @@ pub async fn rsvp_submit(
     // Append one row per guest x event. Meal/dietary/message ride on the
     // meal-serving event rows where they're meaningful.
     let mut tx = pool.begin().await?;
+
+    // Save the latest contact emails onto the guest records (mutable, unlike the
+    // append-only rsvp_history).
+    for (gid, addr) in &emails {
+        sqlx::query("UPDATE guests SET email = ? WHERE id = ? AND party_id = ?")
+            .bind(addr)
+            .bind(gid)
+            .bind(&party.id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
     for g in &guests {
         for e in &events {
             let attending = attend.contains(&(g.id.clone(), e.id.clone()));
@@ -232,7 +264,7 @@ async fn find_party(pool: &AppState, code: &str) -> Result<Option<Party>, AppErr
 
 async fn fetch_guests(pool: &AppState, party_id: &str) -> Result<Vec<Guest>, AppError> {
     Ok(sqlx::query_as::<_, Guest>(
-        "SELECT id, first_name, last_name FROM guests
+        "SELECT id, first_name, last_name, email FROM guests
          WHERE party_id = ? ORDER BY is_plus_one, created_at",
     )
     .bind(party_id)
@@ -312,6 +344,7 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
         .map(|g| GuestRow {
             id: g.id.clone(),
             name: format!("{} {}", g.first_name, g.last_name),
+            email: g.email.clone().unwrap_or_default(),
             meal_choice: meal.get(&g.id).cloned().unwrap_or_default(),
             dietary: diet.get(&g.id).cloned().unwrap_or_default(),
             events: events
@@ -366,6 +399,16 @@ fn rsvp_closed_html() -> String {
   <p class="text-5xl mb-6">&#128591;</p>
   <h3 class="font-display text-3xl text-stone-800 mb-3">RSVPs are now closed</h3>
   <p class="text-stone-500">Please reach out to the couple directly and we&apos;ll do our best to accommodate you.</p>
+</div>"#
+        .to_string()
+}
+
+fn email_required_html() -> String {
+    r#"<div class="text-center py-12">
+  <p class="text-5xl mb-6">&#9993;&#65039;</p>
+  <h3 class="font-display text-3xl text-stone-800 mb-3">We need an email</h3>
+  <p class="text-stone-500 mb-6">Please provide at least one valid email for your party so we can reach you with details.</p>
+  <a href="/rsvp" class="inline-block py-3 px-8 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors">Back to RSVP</a>
 </div>"#
         .to_string()
 }
