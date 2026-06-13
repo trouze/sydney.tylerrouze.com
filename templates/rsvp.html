@@ -4,96 +4,67 @@
 
 {% block content %}
 <section class="py-24 px-6">
-  <div class="max-w-lg mx-auto">
+  <div class="max-w-2xl mx-auto">
 
     <div class="text-center mb-16">
       <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-5">Join Us</p>
       <h1 class="font-display text-7xl text-stone-800">RSVP</h1>
       <div class="w-12 h-px bg-stone-300 mx-auto mt-10"></div>
-      <p class="text-stone-500 text-sm mt-6">Kindly reply by August 1, 2026</p>
+      <p class="text-stone-600 text-sm mt-6">Replying for <span class="font-display text-lg text-stone-800">{{ party_label }}</span></p>
+      <p class="text-stone-400 text-xs mt-2">Kindly reply by August 1, 2026 — you can update your answers any time before then.</p>
     </div>
 
     <div id="rsvp-form">
-      <form
-        hx-post="/rsvp"
-        hx-target="#rsvp-form"
-        hx-swap="outerHTML"
-        class="space-y-10"
-      >
-        <div>
-          <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Full Name</label>
-          <input
-            type="text"
-            name="name"
-            required
-            autocomplete="name"
-            class="w-full border-b border-stone-300 bg-transparent pb-2 text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600 transition-colors text-sm"
-            placeholder="Your full name"
-          />
-        </div>
+      <form hx-post="/rsvp" hx-target="#rsvp-form" hx-swap="outerHTML" class="space-y-12">
 
-        <div>
-          <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Email</label>
-          <input
-            type="email"
-            name="email"
-            required
-            autocomplete="email"
-            class="w-full border-b border-stone-300 bg-transparent pb-2 text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600 transition-colors text-sm"
-            placeholder="your@email.com"
-          />
-        </div>
+        {% for guest in guests %}
+        <div class="border-b border-stone-200 pb-10">
+          <h3 class="font-display text-3xl text-stone-800 mb-6">{{ guest.name }}</h3>
 
-        <div>
-          <p class="text-xs tracking-widest uppercase text-stone-400 mb-4">Attendance</p>
-          <div class="flex gap-10">
+          <p class="text-xs tracking-widest uppercase text-stone-400 mb-4">Which events will they attend?</p>
+          <div class="grid sm:grid-cols-2 gap-3 mb-8">
+            {% for cell in guest.events %}
             <label class="flex items-center gap-3 cursor-pointer group">
-              <input type="radio" name="attending" value="yes" required class="accent-stone-800 w-4 h-4" />
-              <span class="text-sm text-stone-600 group-hover:text-stone-800 transition-colors">Joyfully accepts</span>
+              <input
+                type="checkbox"
+                name="attend"
+                value="{{ guest.id }}:{{ cell.event_id }}"
+                {% if cell.attending %}checked{% endif %}
+                class="accent-stone-800 w-4 h-4"
+              />
+              <span class="text-sm text-stone-600 group-hover:text-stone-800 transition-colors">{{ cell.event_name }}</span>
             </label>
-            <label class="flex items-center gap-3 cursor-pointer group">
-              <input type="radio" name="attending" value="no" class="accent-stone-800 w-4 h-4" />
-              <span class="text-sm text-stone-600 group-hover:text-stone-800 transition-colors">Regretfully declines</span>
-            </label>
+            {% endfor %}
           </div>
-        </div>
 
-        <div>
-          <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Number of Guests</label>
-          <select
-            name="guest_count"
-            class="w-full border-b border-stone-300 bg-transparent pb-2 text-stone-600 focus:outline-none focus:border-stone-600 transition-colors text-sm appearance-none"
-          >
-            <option value="1">1 — Just me</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-          </select>
+          {% if serves_meal %}
+          <div class="grid sm:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Meal Preference</label>
+              <select
+                name="meal:{{ guest.id }}"
+                class="w-full border-b border-stone-300 bg-transparent pb-2 text-stone-600 focus:outline-none focus:border-stone-600 transition-colors text-sm appearance-none"
+              >
+                <option value="" {% if guest.meal_choice.is_empty() %}selected{% endif %}>Select a meal</option>
+                {% for meal in meal_options %}
+                <option value="{{ meal.id }}" {% if guest.meal_choice == meal.id %}selected{% endif %}>{{ meal.label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Dietary Restrictions</label>
+              <input
+                type="text"
+                name="diet:{{ guest.id }}"
+                value="{{ guest.dietary }}"
+                class="w-full border-b border-stone-300 bg-transparent pb-2 text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600 transition-colors text-sm"
+                placeholder="Allergies or dietary needs"
+              />
+            </div>
+          </div>
+          {% endif %}
         </div>
-
-        <div>
-          <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Meal Preference</label>
-          <select
-            name="meal_choice"
-            class="w-full border-b border-stone-300 bg-transparent pb-2 text-stone-600 focus:outline-none focus:border-stone-600 transition-colors text-sm appearance-none"
-          >
-            <option value="">Select a meal</option>
-            <option value="chicken">Chicken Marsala</option>
-            <option value="beef">Beef Tenderloin</option>
-            <option value="vegetarian">Vegetarian</option>
-            <option value="vegan">Vegan</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Dietary Restrictions</label>
-          <input
-            type="text"
-            name="dietary_restrictions"
-            class="w-full border-b border-stone-300 bg-transparent pb-2 text-stone-800 placeholder-stone-300 focus:outline-none focus:border-stone-600 transition-colors text-sm"
-            placeholder="Allergies or dietary needs"
-          />
-        </div>
+        {% endfor %}
 
         <div>
           <label class="block text-xs tracking-widest uppercase text-stone-400 mb-3">Note to the Couple</label>

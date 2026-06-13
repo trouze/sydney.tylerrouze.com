@@ -7,9 +7,10 @@ if ! command -v cargo &>/dev/null; then
   source "$HOME/.cargo/env"
 fi
 
-# Install sqlite3 dev headers (needed by libsqlite3-sys)
+# Install sqlite3 dev headers (needed by libsqlite3-sys) and the sqlite3 CLI
+# (used by the deploy workflow's pre-launch DB reset guard).
 if command -v apt-get &>/dev/null; then
-  apt-get update -qq && apt-get install -y -qq libsqlite3-dev pkg-config
+  apt-get update -qq && apt-get install -y -qq libsqlite3-dev sqlite3 pkg-config
 fi
 
 cd /home/exedev/sydney.tylerrouze.com

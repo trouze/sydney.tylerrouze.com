@@ -45,6 +45,38 @@ jobs:
           scp $SSH_OPTS target/release/wedding-rsvp \
             $VM:/home/exedev/sydney.tylerrouze.com/target/release/wedding-rsvp
 
+      # Pre-launch only: wipe the DB so sqlx re-runs migrations from scratch.
+      # Controlled by the repo variable RESET_DB (Settings -> Secrets and
+      # variables -> Actions -> Variables). Set it to 'true' while the schema is
+      # still churning; delete it (or set 'false') once the site is live.
+      # Safety net: refuses to drop a DB that already holds real RSVP records,
+      # even if RESET_DB was accidentally left on.
+      - name: Reset database (pre-launch only)
+        if: vars.RESET_DB == 'true'
+        env:
+          SSH_OPTS: -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no
+          VM: exedev@${{ secrets.VM_NAME }}.exe.xyz
+        run: |
+          ssh $SSH_OPTS $VM bash -s <<'EOF'
+          set -euo pipefail
+          DB=/home/exedev/sydney.tylerrouze.com/data/wedding.db
+          if [ ! -f "$DB" ]; then
+            echo "No DB present yet; nothing to reset."
+            exit 0
+          fi
+          if ! command -v sqlite3 >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
+          fi
+          # Count real submissions. Missing table (fresh schema) counts as 0.
+          count=$(sqlite3 "$DB" "SELECT count(*) FROM rsvp_history;" 2>/dev/null || echo 0)
+          if [ "$count" -gt 0 ]; then
+            echo "::error::Refusing to reset: rsvp_history has $count record(s). The site is taking RSVPs -- set RESET_DB to false (or delete the variable)."
+            exit 1
+          fi
+          rm -f "$DB" "$DB-shm" "$DB-wal"
+          echo "Database reset (had 0 RSVP records)."
+          EOF
+
       - name: Restart service
         env:
           SSH_OPTS: -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no
