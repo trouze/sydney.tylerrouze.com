@@ -548,6 +548,46 @@ pub async fn update_party(
     Ok(Redirect::to("/admin").into_response())
 }
 
+// ---------- POST /admin/parties/:id/delete ----------
+
+/// Remove a party and everything attached to it — guests, their RSVP history,
+/// and event invitations — in one transaction. Uses the same FK-safe teardown
+/// the importer uses for dropped parties, so nothing is orphaned.
+pub async fn delete_party(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    if !require_admin(&jar) {
+        return Ok(Redirect::to("/admin/login").into_response());
+    }
+
+    // Capture contact emails before the rows go away, so we can blank their
+    // listmonk events afterward.
+    let emails: Vec<String> = sqlx::query_scalar(
+        "SELECT email FROM guests
+         WHERE party_id = ? AND email IS NOT NULL AND trim(email) != ''",
+    )
+    .bind(&id)
+    .fetch_all(&pool)
+    .await?;
+
+    let mut tx = pool.begin().await?;
+    clear_party_guests(&mut tx, &id).await?;
+    sqlx::query("DELETE FROM parties WHERE id = ?")
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    // Best-effort: these guests are no longer attending anything. Blank their
+    // events_attending in listmonk (keeps them subscribed; never creates anyone).
+    // Runs in the background and never affects this response.
+    crate::listmonk::clear_events_for(emails);
+
+    Ok(Redirect::to("/admin").into_response())
+}
+
 // ---------- GET /admin/analytics ----------
 
 pub async fn analytics(State(pool): State<AppState>, jar: CookieJar) -> Result<Response, AppError> {

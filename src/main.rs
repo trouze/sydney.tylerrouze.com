@@ -64,6 +64,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/admin/parties/:id", post(handlers::admin::update_party))
         .route(
+            "/admin/parties/:id/delete",
+            post(handlers::admin::delete_party),
+        )
+        .route(
             "/admin/import",
             get(handlers::admin::import_page).post(handlers::admin::import_commit),
         )

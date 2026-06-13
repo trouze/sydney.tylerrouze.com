@@ -91,6 +91,21 @@
       </div>
     </form>
 
+    <!-- Danger zone: separate form so it can't be submitted with Save. -->
+    <div class="mt-16 border-t border-red-100 pt-8">
+      <p class="text-xs tracking-widest uppercase text-red-400 mb-2">Danger Zone</p>
+      <div class="flex items-center justify-between gap-4">
+        <p class="text-sm text-stone-500">Permanently delete this party, its guests, and any RSVPs.</p>
+        <form method="post" action="/admin/parties/{{ party.id }}/delete"
+          onsubmit="return confirm('Delete {{ party.label }}? This removes the party, its {{ guests.len() }} guest(s), and any RSVPs — permanently.');">
+          <button type="submit"
+            class="shrink-0 py-3 px-8 text-xs tracking-widest uppercase border border-red-300 text-red-600 hover:bg-red-600 hover:text-white transition-colors">
+            Delete Party
+          </button>
+        </form>
+      </div>
+    </div>
+
   </div>
 </section>
 {% endblock %}

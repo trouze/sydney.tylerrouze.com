@@ -47,6 +47,10 @@
             <code class="text-xs tracking-[0.2em] uppercase text-stone-500 bg-stone-100 px-2 py-1">{{ pv.party.invite_code }}</code>
             <a href="/admin/parties/{{ pv.party.id }}/edit" class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">Edit</a>
             <a href="/admin/parties/{{ pv.party.id }}/qr.svg" download="qr-{{ pv.party.invite_code }}.svg" class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">QR</a>
+            <form method="post" action="/admin/parties/{{ pv.party.id }}/delete"
+              onsubmit="return confirm('Delete {{ pv.party.label }}? This removes the party, its {{ pv.guests.len() }} guest(s), and any RSVPs — permanently.');">
+              <button type="submit" class="text-xs tracking-widest uppercase text-stone-400 hover:text-red-600 transition-colors">Delete</button>
+            </form>
           </div>
         </div>
         {% if pv.guests.is_empty() %}

@@ -144,6 +144,34 @@ impl Listmonk {
         Ok(())
     }
 
+    /// Best-effort: set a subscriber's `events_attending` to `[]` if they already
+    /// exist in listmonk. Never creates a subscriber and never changes list
+    /// memberships — used when a party is deleted, so a former guest stops being
+    /// tagged as attending anything while staying on the list. Other attributes
+    /// are preserved (merge PATCH).
+    pub async fn clear_events(&self, email: &str) -> anyhow::Result<()> {
+        let Some((id, mut attribs)) = self.find_subscriber(email).await? else {
+            return Ok(()); // never synced; nothing to clear
+        };
+        if !attribs.is_object() {
+            attribs = json!({});
+        }
+        attribs["events_attending"] = json!(Vec::<String>::new());
+        let resp = self
+            .client
+            .patch(format!("{}/api/subscribers/{}", self.base_url, id))
+            .basic_auth(&self.user, Some(&self.token))
+            .json(&json!({ "attribs": attribs }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let code = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("listmonk clear events failed ({code}): {body}");
+        }
+        Ok(())
+    }
+
     /// Look up a subscriber by email, returning `(id, attribs)`; `None` if not
     /// found. `attribs` is whatever listmonk currently stores (possibly null).
     async fn find_subscriber(
@@ -186,6 +214,23 @@ pub fn sync_contacts(contacts: Vec<Contact>) {
                     tracing::debug!("listmonk: synced {} to list {}", contact.email, lm.list_id)
                 }
                 Err(e) => tracing::warn!("listmonk: failed to sync {}: {e:#}", contact.email),
+            }
+        }
+    });
+}
+
+/// Fire-and-forget: clear `events_attending` for each email that already exists
+/// in listmonk (used when a party is deleted). Keeps them subscribed; never
+/// creates anyone. A no-op when the integration isn't configured.
+pub fn clear_events_for(emails: Vec<String>) {
+    let Some(lm) = Listmonk::from_env() else {
+        return;
+    };
+    tokio::spawn(async move {
+        for email in emails {
+            match lm.clear_events(&email).await {
+                Ok(()) => tracing::debug!("listmonk: cleared events for {email}"),
+                Err(e) => tracing::warn!("listmonk: failed to clear events for {email}: {e:#}"),
             }
         }
     });
@@ -367,5 +412,34 @@ mod tests {
         // A non-409 failure must surface as an error (so it's logged, not silent).
         let (lm, _calls) = mock_listmonk(500, None).await;
         assert!(lm.add_to_list(&contact("X", "x@x.com", &[])).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn clear_events_blanks_attribs_for_existing_subscriber() {
+        // Existing subscriber: PATCH events_attending=[] while preserving others;
+        // no POST or list change (membership untouched).
+        let (lm, calls) = mock_listmonk(200, Some(7)).await;
+        lm.clear_events("bob@x.com").await.unwrap();
+
+        let calls = calls.lock().unwrap();
+        assert!(calls.posts.is_empty(), "must not create a subscriber");
+        assert!(calls.puts.is_empty(), "must not touch list membership");
+        assert_eq!(calls.patches.len(), 1);
+        let attribs = &calls.patches[0]["attribs"];
+        assert_eq!(attribs["events_attending"], json!([] as [String; 0]));
+        // Unrelated attrib from "another site" is preserved.
+        assert_eq!(attribs["site"], "personal");
+    }
+
+    #[tokio::test]
+    async fn clear_events_noop_when_subscriber_absent() {
+        // Not in listmonk (e.g. a deleted guest who never RSVP'd): do nothing.
+        let (lm, calls) = mock_listmonk(200, None).await;
+        lm.clear_events("ghost@x.com").await.unwrap();
+
+        let calls = calls.lock().unwrap();
+        assert!(calls.patches.is_empty(), "no PATCH for a non-subscriber");
+        assert!(calls.posts.is_empty());
+        assert!(calls.puts.is_empty());
     }
 }
