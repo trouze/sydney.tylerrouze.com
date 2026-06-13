@@ -80,7 +80,8 @@ pub async fn download_all_qr_zip(
             zip.write_all(svg.as_bytes())
                 .map_err(|e| anyhow::anyhow!("zip write error: {e}"))?;
         }
-        zip.finish().map_err(|e| anyhow::anyhow!("zip finish error: {e}"))?;
+        zip.finish()
+            .map_err(|e| anyhow::anyhow!("zip finish error: {e}"))?;
     }
 
     let bytes = buf.into_inner();

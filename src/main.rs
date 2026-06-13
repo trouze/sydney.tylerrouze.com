@@ -63,11 +63,23 @@ async fn main() -> anyhow::Result<()> {
             get(handlers::admin::edit_party_page),
         )
         .route("/admin/parties/:id", post(handlers::admin::update_party))
-        .route("/admin/import", get(handlers::admin::import_page).post(handlers::admin::import_commit))
+        .route(
+            "/admin/import",
+            get(handlers::admin::import_page).post(handlers::admin::import_commit),
+        )
         .route("/admin/import/export", get(handlers::admin::import_export))
-        .route("/admin/import/preview", post(handlers::admin::import_preview))
-        .route("/admin/meals", get(handlers::admin::meals_page).post(handlers::admin::save_meal))
-        .route("/admin/events", get(handlers::admin::events_page).post(handlers::admin::save_event))
+        .route(
+            "/admin/import/preview",
+            post(handlers::admin::import_preview),
+        )
+        .route(
+            "/admin/meals",
+            get(handlers::admin::meals_page).post(handlers::admin::save_meal),
+        )
+        .route(
+            "/admin/events",
+            get(handlers::admin::events_page).post(handlers::admin::save_event),
+        )
         .route("/admin/qr/all.zip", get(handlers::qr::download_all_qr_zip))
         .route("/admin/parties/:id/qr.svg", get(handlers::qr::party_qr_svg))
         // ---- end admin ----

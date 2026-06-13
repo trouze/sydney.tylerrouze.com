@@ -218,14 +218,13 @@ pub async fn dashboard(State(pool): State<AppState>, jar: CookieJar) -> Result<R
         })
         .collect();
 
-    let events = sqlx::query_as::<_, (String, String)>(
-        "SELECT id, name FROM events ORDER BY sort_order",
-    )
-    .fetch_all(&pool)
-    .await?
-    .into_iter()
-    .map(|(id, name)| EventOption { id, name })
-    .collect();
+    let events =
+        sqlx::query_as::<_, (String, String)>("SELECT id, name FROM events ORDER BY sort_order")
+            .fetch_all(&pool)
+            .await?
+            .into_iter()
+            .map(|(id, name)| EventOption { id, name })
+            .collect();
 
     Ok(Html(
         AdminTemplate {
@@ -372,11 +371,10 @@ pub async fn edit_party_page(
     .await?;
 
     // Events (matrix columns) + the current invitation set for this party.
-    let events = sqlx::query_as::<_, (String, String)>(
-        "SELECT id, name FROM events ORDER BY sort_order",
-    )
-    .fetch_all(&pool)
-    .await?;
+    let events =
+        sqlx::query_as::<_, (String, String)>("SELECT id, name FROM events ORDER BY sort_order")
+            .fetch_all(&pool)
+            .await?;
     let invited = fetch_invitation_set(&pool, &id).await?;
 
     let event_names = events.iter().map(|(_, name)| name.clone()).collect();
@@ -710,7 +708,10 @@ fn rand_byte() -> u8 {
 
 // ---------- GET /admin/meals ----------
 
-pub async fn meals_page(State(pool): State<AppState>, jar: CookieJar) -> Result<Response, AppError> {
+pub async fn meals_page(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
     if !require_admin(&jar) {
         return Ok(Redirect::to("/admin/login").into_response());
     }
@@ -726,7 +727,10 @@ pub async fn meals_page(State(pool): State<AppState>, jar: CookieJar) -> Result<
 
 // ---------- GET /admin/events ----------
 
-pub async fn events_page(State(pool): State<AppState>, jar: CookieJar) -> Result<Response, AppError> {
+pub async fn events_page(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
     if !require_admin(&jar) {
         return Ok(Redirect::to("/admin/login").into_response());
     }
@@ -1028,7 +1032,9 @@ fn parse_import_csv(text: &str) -> Result<(Vec<ParsedGroup>, Vec<String>), Strin
         }
         // A guest row with nothing to attach it to.
         if code.is_none() && label.is_empty() {
-            warnings.push(format!("Row {line}: no party_label or invite_code — skipped."));
+            warnings.push(format!(
+                "Row {line}: no party_label or invite_code — skipped."
+            ));
             continue;
         }
 
@@ -1110,8 +1116,10 @@ fn reconcile(
     existing: Vec<ExistingParty>,
     mut warnings: Vec<String>,
 ) -> ReconcilePlan {
-    let by_code: HashMap<String, ExistingParty> =
-        existing.into_iter().map(|p| (p.invite_code.clone(), p)).collect();
+    let by_code: HashMap<String, ExistingParty> = existing
+        .into_iter()
+        .map(|p| (p.invite_code.clone(), p))
+        .collect();
     let mut referenced: HashSet<String> = HashSet::new();
     let mut creates = Vec::new();
     let mut updates = Vec::new();
@@ -1163,7 +1171,7 @@ fn reconcile(
         .filter(|(code, _)| !referenced.contains(code))
         .map(|(code, p)| (p.id, code, p.label))
         .collect();
-    removes.sort_by(|a, b| a.2.to_ascii_lowercase().cmp(&b.2.to_ascii_lowercase()));
+    removes.sort_by_key(|(_, _, label)| label.to_ascii_lowercase());
 
     ReconcilePlan {
         creates,
@@ -1197,11 +1205,10 @@ fn unknown_event_warnings(groups: &[ParsedGroup], known: &HashMap<String, String
 
 /// Load the current parties for diffing.
 async fn load_existing_parties(pool: &AppState) -> Result<Vec<ExistingParty>, AppError> {
-    let rows = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT id, invite_code, label FROM parties",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows =
+        sqlx::query_as::<_, (String, String, String)>("SELECT id, invite_code, label FROM parties")
+            .fetch_all(pool)
+            .await?;
     Ok(rows
         .into_iter()
         .map(|(id, invite_code, label)| ExistingParty {
@@ -1368,11 +1375,10 @@ pub async fn import_export(
 
     // One column per event (header = event name), so invitations round-trip
     // through the spreadsheet. "x" in a cell = that guest is invited.
-    let events = sqlx::query_as::<_, (String, String)>(
-        "SELECT id, name FROM events ORDER BY sort_order",
-    )
-    .fetch_all(&pool)
-    .await?;
+    let events =
+        sqlx::query_as::<_, (String, String)>("SELECT id, name FROM events ORDER BY sort_order")
+            .fetch_all(&pool)
+            .await?;
     let invited: HashSet<(String, String)> =
         sqlx::query_as::<_, (String, String)>("SELECT guest_id, event_id FROM event_invitations")
             .fetch_all(&pool)
@@ -1382,7 +1388,18 @@ pub async fn import_export(
 
     // LEFT JOIN so a party with no guests still emits one (code-only) row, which
     // keeps it referenced on a round-trip instead of being treated as removed.
-    let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<bool>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<bool>,
+        ),
+    >(
         "SELECT p.invite_code, p.label, g.id, g.first_name, g.last_name, g.email, g.is_plus_one
          FROM parties p
          LEFT JOIN guests g ON g.party_id = p.id
@@ -1754,10 +1771,7 @@ mod tests {
     #[test]
     fn no_event_columns_leaves_invited_events_none() {
         // Without event columns, guests default to "all events" (None).
-        let (groups, _) = parse_import_csv(
-            "party_label,first_name\nSmith,John\n",
-        )
-        .unwrap();
+        let (groups, _) = parse_import_csv("party_label,first_name\nSmith,John\n").unwrap();
         assert!(groups[0].guests[0].invited_events.is_none());
     }
 
@@ -1833,7 +1847,11 @@ mod tests {
     fn reconcile_blank_label_keeps_existing_name() {
         // A code-only row (empty label) must not blank out the party name.
         let groups = parse_only("invite_code,party_label,first_name\nSMITH-7Q2,,\n");
-        let plan = reconcile(groups, vec![existing("p1", "SMITH-7Q2", "Smith Family")], vec![]);
+        let plan = reconcile(
+            groups,
+            vec![existing("p1", "SMITH-7Q2", "Smith Family")],
+            vec![],
+        );
         assert_eq!(plan.updates.len(), 1);
         assert_eq!(plan.updates[0].label, "Smith Family");
         assert!(plan.removes.is_empty());
@@ -1873,7 +1891,10 @@ mod tests {
     }
 
     async fn count(pool: &AppState, sql: &str) -> i64 {
-        sqlx::query_scalar::<_, i64>(sql).fetch_one(pool).await.unwrap()
+        sqlx::query_scalar::<_, i64>(sql)
+            .fetch_one(pool)
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
@@ -1940,8 +1961,18 @@ mod tests {
 
         // The Lees created; Jones gone with its RSVP; no orphaned guests.
         assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties").await, 2);
-        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'The Lees'").await, 1);
-        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Jones'").await, 0);
+        assert_eq!(
+            count(
+                &pool,
+                "SELECT COUNT(*) FROM parties WHERE label = 'The Lees'"
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Jones'").await,
+            0
+        );
         assert_eq!(count(&pool, "SELECT COUNT(*) FROM rsvp_history").await, 0);
         assert_eq!(
             count(
@@ -1991,11 +2022,17 @@ mod tests {
 
         let code_only = format!("invite_code,party_label,first_name\n{code},Solo,\n");
         apply_csv(&pool, &code_only).await;
-        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Solo'").await, 1);
+        assert_eq!(
+            count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Solo'").await,
+            1
+        );
         assert_eq!(count(&pool, "SELECT COUNT(*) FROM guests").await, 0);
 
         apply_csv(&pool, &code_only).await;
-        assert_eq!(count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Solo'").await, 1);
+        assert_eq!(
+            count(&pool, "SELECT COUNT(*) FROM parties WHERE label = 'Solo'").await,
+            1
+        );
         assert_eq!(code_for(&pool, "Solo").await, code);
     }
 
@@ -2015,7 +2052,11 @@ mod tests {
     #[tokio::test]
     async fn import_without_event_columns_invites_everyone_to_all_events() {
         let pool = test_pool().await;
-        apply_csv(&pool, "party_label,first_name,last_name\nSmith,John,Smith\n").await;
+        apply_csv(
+            &pool,
+            "party_label,first_name,last_name\nSmith,John,Smith\n",
+        )
+        .await;
         let total_events = count(&pool, "SELECT COUNT(*) FROM events").await as usize;
         assert_eq!(invited_events_of(&pool, "John").await.len(), total_events);
     }

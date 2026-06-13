@@ -260,7 +260,11 @@ pub async fn rsvp_submit(
             let name = guests
                 .iter()
                 .find(|g| &g.id == *gid)
-                .map(|g| format!("{} {}", g.first_name, g.last_name).trim().to_string())
+                .map(|g| {
+                    format!("{} {}", g.first_name, g.last_name)
+                        .trim()
+                        .to_string()
+                })
                 .filter(|n| !n.is_empty())
                 .unwrap_or_else(|| party.label.clone());
             let events_attending = events

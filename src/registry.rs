@@ -253,7 +253,7 @@ fn group_thousands(n: u64) -> String {
     let bytes = digits.as_bytes();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (i, b) in bytes.iter().enumerate() {
-        if i > 0 && (bytes.len() - i) % 3 == 0 {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(*b as char);
@@ -390,7 +390,8 @@ mod tests {
 
     #[test]
     fn giftid_attr_not_confused_with_groupid() {
-        let tag = r#"itemGiftVisitorList" ispurchased="false" giftid="173677524" giftsurprisegroupid="""#;
+        let tag =
+            r#"itemGiftVisitorList" ispurchased="false" giftid="173677524" giftsurprisegroupid="""#;
         assert_eq!(attr_value(tag, "giftid").as_deref(), Some("173677524"));
     }
 

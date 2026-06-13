@@ -98,7 +98,10 @@ impl Listmonk {
         // Already a subscriber (from a prior RSVP, or another site's list). Fetch
         // them so we can preserve their other attributes when updating.
         let (id, mut attribs) = self.find_subscriber(&contact.email).await?.ok_or_else(|| {
-            anyhow::anyhow!("listmonk says {} exists but lookup returned nothing", contact.email)
+            anyhow::anyhow!(
+                "listmonk says {} exists but lookup returned nothing",
+                contact.email
+            )
         })?;
 
         // Add to the wedding list without touching existing memberships.
@@ -143,7 +146,10 @@ impl Listmonk {
 
     /// Look up a subscriber by email, returning `(id, attribs)`; `None` if not
     /// found. `attribs` is whatever listmonk currently stores (possibly null).
-    async fn find_subscriber(&self, email: &str) -> anyhow::Result<Option<(i64, serde_json::Value)>> {
+    async fn find_subscriber(
+        &self,
+        email: &str,
+    ) -> anyhow::Result<Option<(i64, serde_json::Value)>> {
         let body: serde_json::Value = self
             .client
             .get(format!("{}/api/subscribers", self.base_url))
@@ -176,7 +182,9 @@ pub fn sync_contacts(contacts: Vec<Contact>) {
     tokio::spawn(async move {
         for contact in contacts {
             match lm.add_to_list(&contact).await {
-                Ok(()) => tracing::debug!("listmonk: synced {} to list {}", contact.email, lm.list_id),
+                Ok(()) => {
+                    tracing::debug!("listmonk: synced {} to list {}", contact.email, lm.list_id)
+                }
                 Err(e) => tracing::warn!("listmonk: failed to sync {}: {e:#}", contact.email),
             }
         }
@@ -264,7 +272,10 @@ mod tests {
     }
 
     /// Spin up a mock listmonk and return a `Listmonk` client pointed at it.
-    async fn mock_listmonk(post_status: u16, existing_id: Option<i64>) -> (Listmonk, Arc<Mutex<Calls>>) {
+    async fn mock_listmonk(
+        post_status: u16,
+        existing_id: Option<i64>,
+    ) -> (Listmonk, Arc<Mutex<Calls>>) {
         let calls = Arc::new(Mutex::new(Calls::default()));
         let state = MockState {
             calls: calls.clone(),
@@ -294,20 +305,33 @@ mod tests {
     #[tokio::test]
     async fn new_subscriber_is_created_on_the_list_with_events() {
         let (lm, calls) = mock_listmonk(201, None).await;
-        lm.add_to_list(&contact("Jane Smith", "jane@x.com", &["Ceremony", "Reception"]))
-            .await
-            .unwrap();
+        lm.add_to_list(&contact(
+            "Jane Smith",
+            "jane@x.com",
+            &["Ceremony", "Reception"],
+        ))
+        .await
+        .unwrap();
 
         let calls = calls.lock().unwrap();
         assert_eq!(calls.posts.len(), 1, "should POST once");
-        assert!(calls.puts.is_empty(), "no list-add needed for a new subscriber");
-        assert!(calls.patches.is_empty(), "no attrib merge needed for a new subscriber");
+        assert!(
+            calls.puts.is_empty(),
+            "no list-add needed for a new subscriber"
+        );
+        assert!(
+            calls.patches.is_empty(),
+            "no attrib merge needed for a new subscriber"
+        );
         let body = &calls.posts[0];
         assert_eq!(body["email"], "jane@x.com");
         assert_eq!(body["name"], "Jane Smith");
         assert_eq!(body["lists"], json!([4]));
         assert_eq!(body["preconfirm_subscriptions"], json!(true));
-        assert_eq!(body["attribs"]["events_attending"], json!(["Ceremony", "Reception"]));
+        assert_eq!(
+            body["attribs"]["events_attending"],
+            json!(["Ceremony", "Reception"])
+        );
     }
 
     #[tokio::test]
@@ -320,7 +344,11 @@ mod tests {
 
         let calls = calls.lock().unwrap();
         assert_eq!(calls.posts.len(), 1, "still attempts the create first");
-        assert_eq!(calls.puts.len(), 1, "adds to the list without replacing memberships");
+        assert_eq!(
+            calls.puts.len(),
+            1,
+            "adds to the list without replacing memberships"
+        );
         let put = &calls.puts[0];
         assert_eq!(put["ids"], json!([7]));
         assert_eq!(put["action"], "add");
