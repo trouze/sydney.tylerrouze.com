@@ -24,10 +24,14 @@ The fetcher pulls two things out of the giftlist HTML:
    - `name` — gift title
    - `itemOffered.offers.price` + `.priceCurrency`
    - `itemOffered.offers.seller.name` — store
-   - `itemOffered.offers.url` — outbound purchase link (GetLink.ashx)
    - `itemOffered.offers.availability` — contains `InStock` / `OutOfStock`
    - `itemOffered.image` — image URL
-   - `url` — contains `giftid=NNN` (used to join to purchase state)
+   - `url` (on the item) — the **PurchaseAssistant** link; this is what the
+     "View & Buy" button uses, so buyers go through MyRegistry's flow (captures
+     email, records the purchase → flips `ispurchased`). Also contains
+     `giftid=NNN`, used to join to purchase state. Do NOT switch the button to
+     `itemOffered.offers.url` (the GetLink direct-to-store deep link) — that
+     bypasses purchase tracking and causes double-buys.
    Parsed by `extract_jsonld_itemlist()` + `parse_gifts()`.
 2. **HTML attributes (purchase state only)** — each gift is a
    `<div class="itemGiftVisitorList" giftid="NNN" ispurchased="true|false">`.

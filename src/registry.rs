@@ -140,10 +140,13 @@ fn parse_gifts(html: &str) -> anyhow::Result<Vec<Gift>> {
             .as_str()
             .map(|s| s.contains("InStock"))
             .unwrap_or(true);
-        // Prefer the offer's GetLink URL (cleaner outbound), fall back to item url.
-        let url = offers["url"]
+        // Use the item's PurchaseAssistant URL so buyers go through MyRegistry's
+        // flow (which captures their email and records the purchase, flipping the
+        // gift to purchased so we can badge it and avoid double-buys). Fall back
+        // to the offer's direct GetLink only if PurchaseAssistant is absent.
+        let url = item["url"]
             .as_str()
-            .or_else(|| item["url"].as_str())
+            .or_else(|| offers["url"].as_str())
             .unwrap_or("")
             .to_string();
         // Cross-reference purchase status by gift id parsed from the item url.
@@ -349,9 +352,11 @@ mod tests {
         assert_eq!(chair.name, "Lounge Chair | The Essential Store");
         assert_eq!(chair.price_display, "$795");
         assert_eq!(chair.store, "theessential.com");
+        // The button points at MyRegistry's PurchaseAssistant flow (item.url),
+        // not the direct-to-store GetLink, so purchases get recorded.
         assert_eq!(
             chair.url,
-            "https://www.myregistry.com/GetLink.ashx?giftId=173677524&mr_apsa=1"
+            "https://www.myregistry.com/Visitors/Giftlist/PurchaseAssistant.aspx?registryId=5485797&giftid=173677524"
         );
         assert!(chair.in_stock);
         assert!(!chair.purchased, "chair has ispurchased=false");
