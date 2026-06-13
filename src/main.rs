@@ -45,6 +45,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/details", get(handlers::details::details))
         .route("/rsvp", get(handlers::rsvp::rsvp_page))
         .route("/rsvp", post(handlers::rsvp::rsvp_submit))
+        // ---- admin (shared-secret auth) ----
+        .route("/admin", get(handlers::admin::dashboard))
+        .route("/admin/login", get(handlers::admin::login_page))
+        .route("/admin/login", post(handlers::admin::login_submit))
+        .route("/admin/parties", post(handlers::admin::create_party))
+        .route("/admin/meals", post(handlers::admin::save_meal))
+        .route("/admin/events", post(handlers::admin::save_event))
+        // ---- end admin ----
         .nest_service("/static", ServeDir::new("static"))
         .with_state(pool)
         .layer(TraceLayer::new_for_http());
