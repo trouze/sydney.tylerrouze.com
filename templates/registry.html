@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Registry{% endblock %}
+
+{% block content %}
+<section class="py-24 px-6">
+  <div class="max-w-3xl mx-auto">
+
+    <div class="text-center mb-16">
+      <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-5">With Gratitude</p>
+      <h1 class="font-display text-7xl text-stone-800">Registry</h1>
+      <div class="w-12 h-px bg-stone-300 mx-auto mt-10"></div>
+      <p class="text-stone-600 leading-loose max-w-xl mx-auto mt-10">
+        Your presence at our wedding is the greatest gift of all. If you&apos;d like to
+        celebrate with something more, here are a few things that would help us begin
+        this next chapter together.
+      </p>
+    </div>
+
+    {% if gifts.is_empty() %}
+    <div class="text-center max-w-xl mx-auto">
+      <div class="mt-4 flex gap-4 justify-center flex-wrap">
+        <a href="https://www.myregistry.com/wedding-registry/tyler-rouze-and-sydney-norcross-austin-tx/5485797/giftlist"
+           target="_blank" rel="noopener"
+           class="px-10 py-3 text-xs tracking-widest uppercase bg-stone-800 text-white hover:bg-stone-700 transition-colors">
+          View Our Registry
+        </a>
+      </div>
+      <p class="text-stone-400 text-xs mt-14 leading-loose">More to come — check back soon.</p>
+    </div>
+    {% else %}
+    <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-12">
+      {% for gift in gifts %}
+      <div class="flex flex-col">
+        <div class="relative aspect-square bg-white border border-stone-200 overflow-hidden">
+          {% if !gift.image.is_empty() %}
+          <img src="{{ gift.image }}" alt="{{ gift.name }}" loading="lazy"
+               class="w-full h-full object-contain p-3 {% if gift.purchased %}opacity-40{% endif %}" />
+          {% endif %}
+          {% if gift.purchased %}
+          <div class="absolute inset-0 flex items-center justify-center">
+            <span class="bg-stone-800 text-white text-[0.65rem] tracking-widest uppercase px-3 py-1">Purchased</span>
+          </div>
+          {% endif %}
+        </div>
+
+        <h3 class="font-display text-xl text-stone-800 mt-4 leading-snug">{{ gift.name }}</h3>
+        {% if !gift.store.is_empty() %}
+        <p class="text-xs tracking-wide text-stone-400 mt-1">{{ gift.store }}</p>
+        {% endif %}
+        {% if !gift.price_display.is_empty() %}
+        <p class="text-sm text-stone-600 mt-2">{{ gift.price_display }}</p>
+        {% endif %}
+
+        <div class="mt-4">
+          {% if gift.purchased %}
+          <span class="inline-block text-xs tracking-widest uppercase text-stone-300">Already gifted — thank you</span>
+          {% else %}
+          <a href="{{ gift.url }}" target="_blank" rel="noopener"
+             class="inline-block py-2 px-6 text-xs tracking-widest uppercase border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white transition-colors">
+            View &amp; Buy
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <p class="text-center text-stone-400 text-xs mt-16 leading-loose">
+      Purchases are handled securely through MyRegistry.<br>
+      <a href="https://www.myregistry.com/wedding-registry/tyler-rouze-and-sydney-norcross-austin-tx/5485797/giftlist"
+         target="_blank" rel="noopener"
+         class="underline underline-offset-2 hover:text-stone-700 transition-colors">See the full registry</a>
+    </p>
+    {% endif %}
+
+  </div>
+</section>
+{% endblock %}

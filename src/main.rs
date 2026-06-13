@@ -13,6 +13,7 @@ mod error;
 mod handlers;
 mod listmonk;
 mod models;
+mod registry;
 
 pub type AppState = sqlx::SqlitePool;
 
@@ -46,6 +47,8 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(handlers::home::home))
         .route("/details", get(handlers::details::details))
+        .route("/story", get(handlers::story::story))
+        .route("/registry", get(handlers::registry::registry))
         .route("/rsvp", get(handlers::rsvp::rsvp_page))
         .route("/rsvp", post(handlers::rsvp::rsvp_submit))
         // ---- admin (shared-secret auth) ----

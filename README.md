@@ -103,3 +103,34 @@ integration is disabled (so dev and tests never call out):
 | `LISTMONK_USER` | API username |
 | `LISTMONK_TOKEN` | API access token |
 | `LISTMONK_LIST_ID` | Target list id (defaults to `4`) |
+
+### API role / permissions
+
+`LISTMONK_USER`/`LISTMONK_TOKEN` should belong to a dedicated, least-privilege
+API user. In listmonk, **Admin → Users → Roles**, create a role with exactly:
+
+**User role permissions**
+- `subscribers:manage` — create subscribers, PATCH attribs, change list membership.
+- `subscribers:sql_query` — the email lookup uses the SQL `query` param (`subscribers.email = '…'`).
+- `subscribers:get_all` — read subscribers across **all** lists. Needed because a
+  guest's email may already exist only on another site's list; the narrower
+  `subscribers:get` is list-scoped and wouldn't find them, so the update path
+  would fail.
+
+**List role**
+- **Manage** on the wedding list (id `4`). "View" is insufficient — adding a
+  subscriber to a list is a manage operation. Covers both the `lists:[4]` on
+  create and the `PUT /api/subscribers/lists` add.
+
+Nothing else is required (no `campaigns:*`, `settings:*`, or `lists:*` — the list
+id is hardcoded). Then **Admin → Users**, create an API user with this role; its
+username + generated token are `LISTMONK_USER` / `LISTMONK_TOKEN`.
+
+What each call needs:
+
+| Integration step | Endpoint | Permission |
+| --- | --- | --- |
+| Create subscriber | `POST /api/subscribers` | `subscribers:manage` + list Manage |
+| Look up by email | `GET /api/subscribers?query=…` | `subscribers:sql_query` + `subscribers:get_all` |
+| Refresh `events_attending` | `PATCH /api/subscribers/{id}` | `subscribers:manage` |
+| Add to wedding list | `PUT /api/subscribers/lists` | `subscribers:manage` + list Manage |

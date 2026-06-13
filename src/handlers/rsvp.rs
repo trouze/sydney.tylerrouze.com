@@ -407,6 +407,7 @@ fn confirmation_html(party_label: &str, attending: bool, is_edit: bool) -> Strin
   <p class="text-5xl mb-6">&#127881;</p>
   <h3 class="font-display text-3xl text-stone-800 mb-3">We can&apos;t wait to celebrate with you!</h3>
   <p class="text-stone-500">Thank you, {label}. Your RSVP has been {saved}. You can return any time before the deadline to update it.</p>
+  <p class="text-stone-400 text-sm mt-8">Your presence is the only gift we need — but if you&apos;d like to celebrate with something more, <a href="/registry" class="underline underline-offset-2 hover:text-stone-700 transition-colors">our registry is here</a>.</p>
 </div>"#
         )
     } else {

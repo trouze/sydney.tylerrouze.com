@@ -57,8 +57,11 @@
             />
           </div>
 
-          <p class="text-xs tracking-widest uppercase text-stone-400 mb-4">Which events will they attend?</p>
-          <div class="grid sm:grid-cols-2 gap-3 mb-8">
+          <div class="flex items-center justify-between mb-4">
+            <p class="text-xs tracking-widest uppercase text-stone-400">Which events will they attend?</p>
+            <button type="button" onclick="toggleAllEvents(this)" class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 underline underline-offset-2 transition-colors">Select all</button>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-3 mb-8" data-events>
             {% for cell in guest.events %}
             <label class="flex items-center gap-3 cursor-pointer group">
               <input
@@ -129,4 +132,16 @@
 
   </div>
 </section>
+
+<script>
+  function toggleAllEvents(btn) {
+    var grid = btn.closest('div').nextElementSibling;
+    if (!grid) return;
+    var boxes = grid.querySelectorAll('input[type="checkbox"]');
+    if (boxes.length === 0) return;
+    var anyUnchecked = Array.prototype.some.call(boxes, function (b) { return !b.checked; });
+    boxes.forEach(function (b) { b.checked = anyUnchecked; });
+    btn.textContent = anyUnchecked ? 'Clear all' : 'Select all';
+  }
+</script>
 {% endblock %}
