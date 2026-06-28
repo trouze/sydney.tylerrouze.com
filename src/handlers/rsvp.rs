@@ -15,14 +15,20 @@ use crate::{
 
 const INVITE_COOKIE: &str = "invite";
 
-/// RSVPs are rejected on or after this date (ISO-8601).
-const RSVP_CUTOFF: &str = "2028-01-01";
+/// Fallback cutoff used when the `settings` table has no `rsvp_cutoff` row.
+const DEFAULT_RSVP_CUTOFF: &str = "2028-01-01";
 
 /// Returns true when the RSVP window has closed (current date >= cutoff).
+/// Reads the cutoff from the `settings` table; falls back to the hardcoded default.
 /// Uses SQLite's `date('now')` so no extra date crate is required.
 async fn rsvp_closed(pool: &AppState) -> Result<bool, AppError> {
+    let cutoff: Option<String> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key = 'rsvp_cutoff'")
+            .fetch_optional(pool)
+            .await?;
+    let cutoff = cutoff.as_deref().unwrap_or(DEFAULT_RSVP_CUTOFF);
     let closed: bool = sqlx::query_scalar("SELECT date('now') >= ?1")
-        .bind(RSVP_CUTOFF)
+        .bind(cutoff)
         .fetch_one(pool)
         .await?;
     Ok(closed)

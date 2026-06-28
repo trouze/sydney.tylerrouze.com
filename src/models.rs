@@ -108,3 +108,9 @@ pub struct EventForm {
     pub serves_meal: Option<String>, // checkbox: present == on
     pub sort_order: Option<i64>,
 }
+
+/// Admin settings form.
+#[derive(Debug, Deserialize)]
+pub struct SettingsForm {
+    pub rsvp_cutoff: String,
+}

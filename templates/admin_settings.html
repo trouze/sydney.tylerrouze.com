@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<section class="py-20 px-6">
+  <div class="max-w-4xl mx-auto">
+
+    <div class="flex justify-between items-center mb-2">
+      <nav class="flex gap-6 text-xs tracking-widest uppercase">
+        <a href="/admin" class="text-stone-400 hover:text-stone-700 transition-colors">Parties</a>
+        <a href="/admin/meals" class="text-stone-400 hover:text-stone-700 transition-colors">Meals</a>
+        <a href="/admin/events" class="text-stone-400 hover:text-stone-700 transition-colors">Events</a>
+        <a href="/admin/analytics" class="text-stone-400 hover:text-stone-700 transition-colors">Analytics</a>
+        <a href="/admin/import" class="text-stone-400 hover:text-stone-700 transition-colors">Import</a>
+        <span class="text-stone-800 border-b border-stone-800 pb-1">Settings</span>
+      </nav>
+      <form method="post" action="/admin/logout">
+        <button type="submit"
+          class="text-xs tracking-widest uppercase text-stone-400 hover:text-stone-700 transition-colors">
+          Log out
+        </button>
+      </form>
+    </div>
+
+    <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-4 text-center">Couple Only</p>
+    <h1 class="font-display text-6xl text-stone-800 text-center">Settings</h1>
+    <div class="w-12 h-px bg-stone-300 mx-auto mt-8 mb-16"></div>
+
+    {% if saved %}
+    <div class="mb-6 px-4 py-3 border border-green-300 bg-green-50 text-green-800 text-sm">
+      Settings saved.
+    </div>
+    {% endif %}
+
+    <!-- ============ RSVP CUTOFF ============ -->
+    <div class="border border-stone-200 bg-white p-6 mb-8">
+      <h2 class="text-xs tracking-widest uppercase text-stone-500 mb-1">RSVP Deadline</h2>
+      <p class="text-sm text-stone-400 mb-5">RSVPs submitted on or after this date are rejected. Format: MM/DD/YYYY.</p>
+      <form method="post" action="/admin/settings" class="flex items-end gap-4">
+        <div class="flex-1">
+          <label class="block text-xs tracking-widest uppercase text-stone-400 mb-1">Cutoff Date</label>
+          <input type="date" name="rsvp_cutoff" value="{{ rsvp_cutoff }}" required
+            class="w-full border-b border-stone-300 bg-transparent pb-1 text-sm text-stone-800 focus:outline-none focus:border-stone-600" />
+        </div>
+        <button type="submit"
+          class="py-2 px-5 text-xs tracking-widest uppercase border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white transition-colors">
+          Save
+        </button>
+      </form>
+    </div>
+
+  </div>
+</section>
+{% endblock %}
