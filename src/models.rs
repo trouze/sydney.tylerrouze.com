@@ -15,6 +15,7 @@ pub struct Guest {
     pub first_name: String,
     pub last_name: String,
     pub email: Option<String>,
+    pub phone: Option<String>,
 }
 
 /// A weekend event guests can RSVP to individually.
@@ -56,6 +57,7 @@ pub struct AdminGuest {
     pub first_name: String,
     pub last_name: String,
     pub email: Option<String>,
+    pub phone: Option<String>,
     pub is_plus_one: bool,
 }
 

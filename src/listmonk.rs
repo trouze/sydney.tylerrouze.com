@@ -33,6 +33,7 @@ pub struct Listmonk {
 pub struct Contact {
     pub name: String,
     pub email: String,
+    pub phone: Option<String>,
     pub events_attending: Vec<String>,
 }
 
@@ -70,6 +71,10 @@ impl Listmonk {
     /// listmonk doesn't already know them. Never disturbs the subscriber's
     /// membership in other lists, nor their other attributes.
     pub async fn add_to_list(&self, contact: &Contact) -> anyhow::Result<()> {
+        let mut attribs = json!({ "events_attending": contact.events_attending });
+        if let Some(ref p) = contact.phone {
+            attribs["phone"] = json!(p);
+        }
         let resp = self
             .client
             .post(format!("{}/api/subscribers", self.base_url))
@@ -80,7 +85,7 @@ impl Listmonk {
                 "status": "enabled",
                 "lists": [self.list_id],
                 "preconfirm_subscriptions": true,
-                "attribs": { "events_attending": contact.events_attending },
+                "attribs": attribs,
             }))
             .send()
             .await?;
@@ -123,12 +128,15 @@ impl Listmonk {
             anyhow::bail!("listmonk add-to-list failed ({code}): {body}");
         }
 
-        // Refresh events_attending, leaving any other attribs (e.g. from another
-        // site) intact. A bare PATCH updates only the fields we send.
+        // Refresh events_attending and phone, leaving any other attribs (e.g.
+        // from another site) intact. A bare PATCH updates only the fields we send.
         if !attribs.is_object() {
             attribs = json!({});
         }
         attribs["events_attending"] = json!(contact.events_attending);
+        if let Some(ref p) = contact.phone {
+            attribs["phone"] = json!(p);
+        }
         let resp = self
             .client
             .patch(format!("{}/api/subscribers/{}", self.base_url, id))
@@ -251,6 +259,7 @@ mod tests {
         Contact {
             name: name.into(),
             email: email.into(),
+            phone: None,
             events_attending: events.iter().map(|s| s.to_string()).collect(),
         }
     }

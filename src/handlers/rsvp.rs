@@ -54,6 +54,7 @@ struct GuestRow {
     id: String,
     name: String,
     email: String,       // current email on file, "" if none
+    phone: String,       // current phone on file, "" if none
     meal_choice: String, // selected meal_option_id, "" if none
     dietary: String,
     /// True if this guest is invited to at least one meal-serving event.
@@ -154,6 +155,7 @@ pub async fn rsvp_submit(
     let mut meal: HashMap<String, String> = HashMap::new();
     let mut diet: HashMap<String, String> = HashMap::new();
     let mut email: HashMap<String, String> = HashMap::new();
+    let mut phone: HashMap<String, String> = HashMap::new();
     let mut message = String::new();
     let mut submitted_by_raw = String::new();
     for (key, value) in fields {
@@ -172,6 +174,11 @@ pub async fn rsvp_submit(
         } else if let Some(g) = key.strip_prefix("email:") {
             if !value.trim().is_empty() {
                 email.insert(g.to_string(), value.trim().to_string());
+            }
+        } else if let Some(g) = key.strip_prefix("phone:") {
+            let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
+            if !digits.is_empty() {
+                phone.insert(g.to_string(), digits);
             }
         } else if key == "message" {
             message = value;
@@ -204,7 +211,7 @@ pub async fn rsvp_submit(
     // meal-serving event rows where they're meaningful.
     let mut tx = pool.begin().await?;
 
-    // Save the latest contact emails onto the guest records (mutable, unlike the
+    // Save the latest contact info onto the guest records (mutable, unlike the
     // append-only rsvp_history).
     for (gid, addr) in &emails {
         sqlx::query("UPDATE guests SET email = ? WHERE id = ? AND party_id = ?")
@@ -213,6 +220,16 @@ pub async fn rsvp_submit(
             .bind(&party.id)
             .execute(&mut *tx)
             .await?;
+    }
+    for (gid, number) in &phone {
+        if guests.iter().any(|g| &g.id == gid) {
+            sqlx::query("UPDATE guests SET phone = ? WHERE id = ? AND party_id = ?")
+                .bind(number)
+                .bind(gid)
+                .bind(&party.id)
+                .execute(&mut *tx)
+                .await?;
+        }
     }
 
     for g in &guests {
@@ -275,9 +292,11 @@ pub async fn rsvp_submit(
                 })
                 .map(|e| e.name.clone())
                 .collect();
+            let phone = phone.get(*gid).cloned();
             crate::listmonk::Contact {
                 name,
                 email: (*addr).clone(),
+                phone,
                 events_attending,
             }
         })
@@ -304,7 +323,7 @@ async fn find_party(pool: &AppState, code: &str) -> Result<Option<Party>, AppErr
 
 async fn fetch_guests(pool: &AppState, party_id: &str) -> Result<Vec<Guest>, AppError> {
     Ok(sqlx::query_as::<_, Guest>(
-        "SELECT id, first_name, last_name, email FROM guests
+        "SELECT id, first_name, last_name, email, phone FROM guests
          WHERE party_id = ? ORDER BY is_plus_one, created_at",
     )
     .bind(party_id)
@@ -420,6 +439,7 @@ async fn build_form(pool: &AppState, party: &Party) -> Result<String, AppError> 
                 id: g.id.clone(),
                 name: format!("{} {}", g.first_name, g.last_name),
                 email: g.email.clone().unwrap_or_default(),
+                phone: g.phone.clone().unwrap_or_default(),
                 meal_choice: meal.get(&g.id).cloned().unwrap_or_default(),
                 dietary: diet.get(&g.id).cloned().unwrap_or_default(),
                 serves_meal,

@@ -193,7 +193,7 @@ pub async fn dashboard(State(pool): State<AppState>, jar: CookieJar) -> Result<R
     .await?;
 
     let guests = sqlx::query_as::<_, AdminGuest>(
-        "SELECT id, party_id, first_name, last_name, email, is_plus_one
+        "SELECT id, party_id, first_name, last_name, email, phone, is_plus_one
          FROM guests ORDER BY is_plus_one, created_at",
     )
     .fetch_all(&pool)
@@ -211,6 +211,7 @@ pub async fn dashboard(State(pool): State<AppState>, jar: CookieJar) -> Result<R
                     first_name: g.first_name.clone(),
                     last_name: g.last_name.clone(),
                     email: g.email.clone(),
+                    phone: g.phone.clone(),
                     is_plus_one: g.is_plus_one,
                 })
                 .collect();
@@ -363,7 +364,7 @@ pub async fn edit_party_page(
     };
 
     let guests = sqlx::query_as::<_, AdminGuest>(
-        "SELECT id, party_id, first_name, last_name, email, is_plus_one
+        "SELECT id, party_id, first_name, last_name, email, phone, is_plus_one
          FROM guests WHERE party_id = ? ORDER BY is_plus_one, created_at",
     )
     .bind(&id)

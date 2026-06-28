@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS guests (
     first_name  TEXT NOT NULL,
     last_name   TEXT NOT NULL,
     email       TEXT,                           -- nullable: a +1 may have none
+    phone       TEXT,                           -- nullable: digits only e.g. 5551234567
     is_plus_one INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
