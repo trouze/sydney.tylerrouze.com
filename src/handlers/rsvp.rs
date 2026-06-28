@@ -15,14 +15,20 @@ use crate::{
 
 const INVITE_COOKIE: &str = "invite";
 
-/// RSVPs are rejected on or after this date (ISO-8601).
-const RSVP_CUTOFF: &str = "2028-01-01";
+/// Fallback cutoff used when the `settings` table has no `rsvp_cutoff` row.
+const DEFAULT_RSVP_CUTOFF: &str = "2028-01-01";
 
 /// Returns true when the RSVP window has closed (current date >= cutoff).
+/// Reads the cutoff from the `settings` table; falls back to the hardcoded default.
 /// Uses SQLite's `date('now')` so no extra date crate is required.
 async fn rsvp_closed(pool: &AppState) -> Result<bool, AppError> {
+    let cutoff: Option<String> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key = 'rsvp_cutoff'")
+            .fetch_optional(pool)
+            .await?;
+    let cutoff = cutoff.as_deref().unwrap_or(DEFAULT_RSVP_CUTOFF);
     let closed: bool = sqlx::query_scalar("SELECT date('now') >= ?1")
-        .bind(RSVP_CUTOFF)
+        .bind(cutoff)
         .fetch_one(pool)
         .await?;
     Ok(closed)
@@ -447,7 +453,7 @@ fn confirmation_html(party_label: &str, attending: bool, is_edit: bool) -> Strin
     if attending {
         format!(
             r#"<div class="text-center py-12">
-  <p class="text-5xl mb-6">&#127881;</p>
+  <img src="/static/images/rsvp.jpg" alt="Tyler &amp; Sydney" class="mx-auto w-52 object-cover mb-8 opacity-90">
   <h3 class="font-display text-3xl text-stone-800 mb-3">We can&apos;t wait to celebrate with you!</h3>
   <p class="text-stone-500">Thank you, {label}. Your RSVP has been {saved}. You can return any time before the deadline to update it.</p>
   <p class="text-stone-400 text-sm mt-8">Your presence is the only gift we need — but if you&apos;d like to celebrate with something more, <a href="/registry" class="underline underline-offset-2 hover:text-stone-700 transition-colors">our registry is here</a>.</p>
@@ -456,7 +462,7 @@ fn confirmation_html(party_label: &str, attending: bool, is_edit: bool) -> Strin
     } else {
         format!(
             r#"<div class="text-center py-12">
-  <p class="text-5xl mb-6">&#128140;</p>
+  <img src="/static/images/rsvp.jpg" alt="Tyler &amp; Sydney" class="mx-auto w-52 object-cover mb-8 opacity-90">
   <h3 class="font-display text-3xl text-stone-800 mb-3">We&apos;ll miss you!</h3>
   <p class="text-stone-500">Thank you for letting us know, {label}.</p>
 </div>"#

@@ -12,6 +12,7 @@ use crate::{
     error::AppError,
     models::{
         AdminEvent, AdminGuest, AdminLoginForm, AdminMealOption, AdminParty, EventForm, MealForm,
+        SettingsForm,
     },
     AppState,
 };
@@ -1692,6 +1693,66 @@ async fn apply_plan(pool: &AppState, plan: ReconcilePlan) -> Result<(), AppError
 
     tx.commit().await?;
     Ok(())
+}
+
+// ---------- GET /admin/settings ----------
+
+#[derive(Template)]
+#[template(path = "admin_settings.html")]
+struct SettingsTemplate {
+    rsvp_cutoff: String,
+    saved: bool,
+}
+
+pub async fn settings_page(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
+    if !require_admin(&jar) {
+        return Ok(Redirect::to("/admin/login").into_response());
+    }
+    let rsvp_cutoff: Option<String> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key = 'rsvp_cutoff'")
+            .fetch_optional(&pool)
+            .await?;
+    Ok(Html(
+        SettingsTemplate {
+            rsvp_cutoff: rsvp_cutoff.unwrap_or_else(|| "2028-01-01".to_string()),
+            saved: false,
+        }
+        .render()?,
+    )
+    .into_response())
+}
+
+// ---------- POST /admin/settings ----------
+
+pub async fn save_settings(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+    Form(form): Form<SettingsForm>,
+) -> Result<Response, AppError> {
+    if !require_admin(&jar) {
+        return Ok(Redirect::to("/admin/login").into_response());
+    }
+    let cutoff = form.rsvp_cutoff.trim();
+    if !cutoff.is_empty() {
+        sqlx::query(
+            "INSERT INTO settings (key, value) VALUES ('rsvp_cutoff', ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .bind(cutoff)
+        .execute(&pool)
+        .await?;
+    }
+    Ok(Html(
+        SettingsTemplate {
+            rsvp_cutoff: cutoff.to_string(),
+            saved: true,
+        }
+        .render()?,
+    )
+    .into_response())
 }
 
 #[cfg(test)]

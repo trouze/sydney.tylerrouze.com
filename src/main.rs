@@ -84,6 +84,10 @@ async fn main() -> anyhow::Result<()> {
             "/admin/events",
             get(handlers::admin::events_page).post(handlers::admin::save_event),
         )
+        .route(
+            "/admin/settings",
+            get(handlers::admin::settings_page).post(handlers::admin::save_settings),
+        )
         .route("/admin/qr/all.zip", get(handlers::qr::download_all_qr_zip))
         .route("/admin/parties/:id/qr.svg", get(handlers::qr::party_qr_svg))
         // ---- end admin ----
