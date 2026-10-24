@@ -14,7 +14,7 @@ type ProjectCi {
 
   new(ws: Workspace!) {
     self.source = ws.directory("/", exclude: [
-      ".git", ".agents", ".claude", ".dagger", ".github",
+      ".git", ".agents", ".claude", ".dagger", ".github", ".ci",
       "target", "data", ".env", ".env.*", "*.log",
     ])
     self
