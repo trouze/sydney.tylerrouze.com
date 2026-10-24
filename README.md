@@ -78,6 +78,23 @@ gh secret set VM_NAME --body "sydney-tylerrouze-com"
 ssh exedev@<vm-name>.exe.xyz 'bash -s' < setup.sh
 ```
 
+## CI
+
+The `project-ci` Dagger check in `.dagger/modules/project-ci/main.dang` runs
+`cargo fmt --check`, Clippy, tests, and a release build on the shared exe.dev
+engine. It filters local build output (`target/`) **before** transferring source
+to the engine. The reusable Dagger tooling is checked out from
+[`trouze/agent-skills`](https://github.com/trouze/agent-skills) at a full commit
+SHA in `.github/workflows/ci.yml`; upgrade that pin in a reviewed PR.
+
+CI requires repo secrets `EXE_DAGGER_SSH_KEY` and `EXE_DAGGER_KNOWN_HOSTS` for
+the shared VM. Only maintainer-authored, same-repo PRs run there. On a machine
+with the skill installed and authorized SSH access, run:
+
+```sh
+~/.config/opencode/skills/dagger-exe/scripts/with-engine.sh remote check
+```
+
 ## Local dev
 
 ```bash

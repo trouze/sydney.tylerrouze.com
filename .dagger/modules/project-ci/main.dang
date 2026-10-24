@@ -1,0 +1,56 @@
+"""
+CI checks for wedding-rsvp, executed on the shared exe.dev Dagger engine.
+
+One sequential container run so fmt/clippy/test/build all reuse each other's
+cargo state. Cache volumes (registry, git checkout, target) persist on the
+engine VM between runs, replacing the old actions/cache restore dance.
+The container image is pinned to the same Rust version as the Dockerfile.
+"""
+type ProjectCi {
+  # Filter at the workspace read, before source is transferred to the engine.
+  # The local Rust target directory can be several gigabytes, and .gitignore
+  # does not automatically filter Dagger Directory arguments.
+  let source: Directory!
+
+  new(ws: Workspace!) {
+    self.source = ws.directory("/", exclude: [
+      ".git", ".agents", ".claude", ".dagger", ".github",
+      "target", "data", ".env", ".env.*", "*.log",
+    ])
+    self
+  }
+
+  """
+  fmt + clippy + tests + release build for the whole repo.
+  """
+  pub check: Void @check {
+    container
+      .from("rust:1.96-slim-bookworm")
+      .withExec(["apt-get", "update"])
+      .withExec([
+        "apt-get", "install", "-y", "--no-install-recommends",
+        "ca-certificates", "pkg-config",
+      ])
+      .withExec(["rustup", "component", "add", "rustfmt", "clippy"])
+      .withDirectory("/src", source)
+      .withWorkdir("/src")
+      .withMountedCache(
+        "/usr/local/cargo/registry",
+        cacheVolume("wedding-rsvp-rust196-cargo-registry"),
+      )
+      .withMountedCache(
+        "/usr/local/cargo/git",
+        cacheVolume("wedding-rsvp-rust196-cargo-git"),
+      )
+      .withMountedCache(
+        "/src/target",
+        cacheVolume("wedding-rsvp-rust196-target"),
+      )
+      .withExec(["cargo", "fmt", "--check"])
+      .withExec(["cargo", "clippy", "--", "-D", "warnings"])
+      .withExec(["cargo", "test"])
+      .withExec(["cargo", "build", "--release"])
+      .sync
+    null
+  }
+}
