@@ -1,33 +1,88 @@
-name: CI
+# Dagger CI executed on the shared exe.dev engine (persistent cache).
+#
+# Requires:
+# - the skill checked out from trouze/agent-skills at a pinned release commit
+# - repo secrets EXE_DAGGER_SSH_KEY and EXE_DAGGER_KNOWN_HOSTS
+#   (register a VM-scoped key: see
+#    https://github.com/trouze/agent-skills/blob/v1.0.1/skills/dagger-exe/references/github-actions.md)
+# Fork PRs never receive the secrets; untrusted code does not reach the VM.
+# Only PRs authored by trouze from this repository can reach the VM.
+name: Dagger CI via exe.dev
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serializes CI for this ref only; does not lock the VM globally.
+concurrency:
+  group: dagger-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   check:
-    runs-on: ubuntu-latest
-
+    if: >-
+      github.actor == 'trouze' &&
+      (github.event_name != 'pull_request' ||
+        (github.event.pull_request.user.login == 'trouze' &&
+         github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SKILL: .ci/agent-skills/skills/dagger-exe
+      DAGGER_NO_NAG: 1
+      EXE_DAGGER_HOST: ${{ vars.EXE_DAGGER_HOST || 'vm.exe.xyz' }}
+      EXE_DAGGER_USER: ${{ vars.EXE_DAGGER_USER || 'vm+dagger' }}
+      EXE_DAGGER_SOCKET: ${{ vars.EXE_DAGGER_SOCKET || '/home/exedev/.config/colima/default/docker.sock' }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Check out project code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          components: rustfmt, clippy
+          persist-credentials: false
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Check out pinned dagger-exe skill
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          repository: trouze/agent-skills
+          ref: 5a14022c38a6f034c4333ac0108182a7762a1f32 # v1.0.1
+          path: .ci/agent-skills
+          persist-credentials: false
 
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-      - run: cargo build
-      - run: cargo test
+      - name: Install pinned Dagger CLI
+        shell: bash
+        run: |
+          BIN_DIR="$RUNNER_TEMP/dagger-bin" "$SKILL/scripts/install-cli.sh"
+          echo "$RUNNER_TEMP/dagger-bin" >> "$GITHUB_PATH"
+
+      - name: Configure VM-scoped SSH credentials
+        shell: bash
+        env:
+          EXE_DAGGER_SSH_KEY: ${{ secrets.EXE_DAGGER_SSH_KEY }}
+          EXE_DAGGER_KNOWN_HOSTS: ${{ secrets.EXE_DAGGER_KNOWN_HOSTS }}
+        run: '"$SKILL/scripts/configure-ci-ssh.sh"'
+
+      - name: Connect to the remote engine
+        shell: bash
+        run: |
+          "$SKILL/scripts/create-remote-context.sh" dagger-exe-vm "$EXE_DAGGER_SOCKET" dagger-exe
+          "$SKILL/scripts/doctor.sh" remote
+
+      # Runs the @check functions in .dagger/modules/project-ci (main.dang):
+      # cargo fmt --check, clippy -D warnings, cargo test, release build,
+      # with cargo/target caches on the engine VM.
+      - name: Run project checks
+        shell: bash
+        run: '"$SKILL/scripts/with-engine.sh" remote check --parallel 2'
+
+      - name: Remove temporary credentials
+        if: always()
+        shell: bash
+        run: |
+          docker context rm --force dagger-exe >/dev/null 2>&1 || true
+          rm -f -- "$RUNNER_TEMP/dagger-exe-ssh/id_ed25519" "$RUNNER_TEMP/dagger-exe-ssh/known_hosts" "$RUNNER_TEMP/dagger-exe-ssh/ssh_config"

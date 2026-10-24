@@ -1,0 +1,17 @@
+# Keeps client->engine directory uploads small. Mirrors .gitignore plus
+# agent/tooling dirs that CI's Rust container never needs.
+.git
+.agents
+.claude
+.github
+target
+data
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.secrets
+.env.variables
+.DS_Store
+.ci
+migrations_attribution

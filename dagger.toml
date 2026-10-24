@@ -1,0 +1,2 @@
+[modules.project-ci]
+source = ".dagger/modules/project-ci"
