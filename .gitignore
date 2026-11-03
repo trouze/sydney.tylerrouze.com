@@ -1,6 +1,4 @@
 /target
-.ci/agent-skills/
-.agents/skills/dagger-exe
 data/
 *.db
 *.db-shm
