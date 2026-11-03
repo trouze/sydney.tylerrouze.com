@@ -3,21 +3,23 @@
 {% block title %}Welcome{% endblock %}
 
 {% block content %}
-<section class="min-h-[calc(100vh-4rem)] flex items-center justify-center text-center px-6">
+<section class="h-[calc(100vh-4rem)] flex items-center justify-center text-center px-6">
   <div class="max-w-2xl mx-auto">
-    <p class="text-xs tracking-[0.4em] uppercase text-stone-400 mb-8">We&apos;re getting married</p>
-    <h1 class="font-display text-[5.5rem] md:text-[8rem] leading-none text-stone-800">
-      Tyler<br>
-      <span class="text-stone-300 text-6xl md:text-7xl">&amp;</span><br>
-      Sydney
+    <p class="text-sm md:text-base tracking-[0.3em] uppercase text-stone-600 mb-6">We&apos;re getting married!</p>
+    <h1 class="font-display text-[5.5rem] md:text-[7rem] leading-none text-stone-800">
+      Sydney<br>
+      <span class="text-stone-300 text-6xl md:text-6xl">&amp;</span><br>
+      Tyler
     </h1>
-    <p class="font-display text-2xl italic text-stone-400 mt-4">Rouze</p>
-    <div class="w-16 h-px bg-stone-300 mx-auto my-10"></div>
+    <div class="w-16 h-px bg-stone-300 mx-auto my-6"></div>
     <p class="text-xs tracking-[0.3em] uppercase text-stone-500">
-      September 2026 &nbsp;·&nbsp; Scranton, Pennsylvania
+      January 15, 2028
     </p>
-    <p class="font-display italic text-stone-400 mt-2">Schrute Farms</p>
-    <div class="mt-12 flex gap-4 justify-center flex-wrap">
+    <p class="text-xs tracking-[0.3em] uppercase text-stone-500 mt-2">
+      Mexico City, Mexico
+    </p>
+    <p class="font-display italic text-stone-400 mt-2">Casa de la Bola</p>
+    <div class="mt-8 flex gap-4 justify-center flex-wrap">
       <a href="/details" class="px-10 py-3 text-xs tracking-widest uppercase border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white transition-colors">
         Details
       </a>
@@ -28,3 +30,5 @@
   </div>
 </section>
 {% endblock %}
+
+{% block footer %}{% endblock %}
