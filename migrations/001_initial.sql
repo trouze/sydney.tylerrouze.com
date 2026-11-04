@@ -91,6 +91,23 @@ CREATE TABLE IF NOT EXISTS event_invitations (
 );
 CREATE INDEX IF NOT EXISTS idx_event_inv_event ON event_invitations(event_id);
 
+-- Addresses collected before invitations go out (USPS validation can be
+-- layered on later as an extra column + re-validation flow; rows keep the
+-- raw, human-entered values as submitted). Managed/exported in
+-- /admin/addresses; populated by the public form at /address.
+CREATE TABLE IF NOT EXISTS addresses (
+    id          TEXT PRIMARY KEY, -- uuid, generated in Rust
+    name        TEXT NOT NULL,    -- names as they should appear on the envelope
+    email       TEXT,             -- optional; for follow-up questions
+    street1     TEXT NOT NULL,
+    street2     TEXT,             -- apartment, suite, etc.
+    city        TEXT NOT NULL,
+    state       TEXT,
+    postal_code TEXT,
+    country     TEXT NOT NULL DEFAULT 'USA',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 
 -- Global key/value config editable through the admin UI.
 CREATE TABLE IF NOT EXISTS settings (

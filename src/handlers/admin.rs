@@ -11,8 +11,8 @@ use uuid::Uuid;
 use crate::{
     error::AppError,
     models::{
-        AdminEvent, AdminGuest, AdminLoginForm, AdminMealOption, AdminParty, EventForm, MealForm,
-        SettingsForm,
+        AddressRow, AdminEvent, AdminGuest, AdminLoginForm, AdminMealOption, AdminParty, EventForm,
+        MealForm, SettingsForm,
     },
     AppState,
 };
@@ -143,6 +143,12 @@ struct PartyStat {
     responded: bool,
     guest_count: i64,
     attending_count: i64,
+}
+
+#[derive(Template)]
+#[template(path = "admin_addresses.html")]
+struct AddressesTemplate {
+    addresses: Vec<AddressRow>,
 }
 
 // ---------- auth routes ----------
@@ -1501,6 +1507,104 @@ pub async fn import_export(
         body,
     )
         .into_response())
+}
+
+// ---------- addresses ----------
+
+/// GET /admin/addresses — addresses collected from the public /address form.
+pub async fn addresses_page(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
+    if !require_admin(&jar) {
+        return Ok(Redirect::to("/admin/login").into_response());
+    }
+
+    let addresses = sqlx::query_as::<_, AddressRow>(
+        "SELECT id, name, email, street1, street2, city, state, postal_code, country, created_at
+         FROM addresses ORDER BY created_at DESC, rowid DESC",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    Ok(Html(AddressesTemplate { addresses }.render()?).into_response())
+}
+
+/// GET /admin/addresses/export — CSV download of every collected address.
+pub async fn addresses_export(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+) -> Result<Response, AppError> {
+    if !require_admin(&jar) {
+        return Ok(Redirect::to("/admin/login").into_response());
+    }
+
+    let rows = sqlx::query_as::<_, AddressRow>(
+        "SELECT id, name, email, street1, street2, city, state, postal_code, country, created_at
+         FROM addresses ORDER BY created_at, rowid",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    let mut wtr = csv::Writer::from_writer(Vec::new());
+    wtr.write_record(&[
+        "name",
+        "email",
+        "street1",
+        "street2",
+        "city",
+        "state",
+        "postal_code",
+        "country",
+    ])
+    .map_err(|e| AppError::Other(anyhow::anyhow!("csv write error: {e}")))?;
+    for r in rows {
+        wtr.write_record(&[
+            r.name,
+            r.email.unwrap_or_default(),
+            r.street1,
+            r.street2.unwrap_or_default(),
+            r.city,
+            r.state.unwrap_or_default(),
+            r.postal_code.unwrap_or_default(),
+            r.country,
+        ])
+        .map_err(|e| AppError::Other(anyhow::anyhow!("csv write error: {e}")))?;
+    }
+
+    let bytes = wtr
+        .into_inner()
+        .map_err(|e| AppError::Other(anyhow::anyhow!("csv flush error: {e}")))?;
+    let body = String::from_utf8(bytes)
+        .map_err(|e| AppError::Other(anyhow::anyhow!("csv utf8 error: {e}")))?;
+    Ok((
+        [
+            ("content-type", "text/csv; charset=utf-8"),
+            (
+                "content-disposition",
+                "attachment; filename=\"addresses.csv\"",
+            ),
+        ],
+        body,
+    )
+        .into_response())
+}
+
+/// POST /admin/addresses/:id/delete — remove one collected address.
+pub async fn delete_address(
+    State(pool): State<AppState>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    if !require_admin(&jar) {
+        return Ok(Redirect::to("/admin/login").into_response());
+    }
+
+    sqlx::query("DELETE FROM addresses WHERE id = ?1")
+        .bind(id)
+        .execute(&pool)
+        .await?;
+    Ok(Redirect::to("/admin/addresses").into_response())
 }
 
 /// Read the uploaded file (preferred) or pasted textarea from a multipart form.

@@ -79,6 +79,39 @@ pub struct AdminEvent {
     pub sort_order: i64,
 }
 
+/// Address-collection form payload from the public `/address` page.
+/// All fields are `Option<String>` (stored NOT NULL in the db where required)
+/// so a partial POST — e.g. a bot with a truncated form — deserializes and
+/// gets the friendly re-rendered error instead of an empty 422.
+#[derive(Debug, Deserialize)]
+pub struct AddressForm {
+    pub name: Option<String>,
+    pub email: Option<String>,
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+    /// Hidden honeypot field; real users never fill this in.
+    pub website: Option<String>,
+}
+
+/// A collected address, as stored in the `addresses` table.
+#[derive(Debug, FromRow)]
+pub struct AddressRow {
+    pub id: String,
+    pub name: String,
+    pub email: Option<String>,
+    pub street1: String,
+    pub street2: Option<String>,
+    pub city: String,
+    pub state: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: String,
+    pub created_at: String,
+}
+
 // ---------- admin form payloads ----------
 
 /// Submitted by the admin login form.

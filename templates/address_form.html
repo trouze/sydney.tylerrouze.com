@@ -1,0 +1,81 @@
+<div id="address-form">
+  <form hx-post="/address" hx-target="#address-form" hx-swap="outerHTML" class="space-y-10">
+
+    {% if let Some(message) = error %}
+    <div class="border border-red-200 bg-red-50 text-red-700 text-sm p-4">
+      {{ message }}
+    </div>
+    {% endif %}
+
+    <div>
+      <label for="addr-name" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">Name(s)</label>
+      <input id="addr-name" type="text" name="name" value="{{ name }}" required
+        placeholder="Sarah Connor"
+        class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+      <p class="text-xs text-neutral-600 mt-2">Whom the envelope should be addressed to — couples and families welcome (&minus; e.g. &ldquo;The Connor Family&rdquo;).</p>
+    </div>
+
+    <div>
+      <label for="addr-street1" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">Street Address</label>
+      <input id="addr-street1" type="text" name="street1" value="{{ street1 }}" required
+        placeholder="123 Main Street"
+        class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+    </div>
+
+    <div>
+      <label for="addr-street2" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">Apartment, Suite, Etc. <span class="normal-case tracking-normal">&middot; optional</span></label>
+      <input id="addr-street2" type="text" name="street2" value="{{ street2 }}"
+        placeholder="Apt 4B"
+        class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-8">
+      <div>
+        <label for="addr-city" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">City</label>
+        <input id="addr-city" type="text" name="city" value="{{ city }}" required
+          class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+      </div>
+      <div>
+        <label for="addr-state" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">State / Region <span class="normal-case tracking-normal">&middot; optional</span></label>
+        <input id="addr-state" type="text" name="state" value="{{ state }}"
+          class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-8">
+      <div>
+        <label for="addr-postal" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">ZIP / Postal Code <span class="normal-case tracking-normal">&middot; optional</span></label>
+        <input id="addr-postal" type="text" name="postal_code" value="{{ postal_code }}"
+          autocomplete="postal-code"
+          class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+      </div>
+      <div>
+        <label for="addr-country" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">Country</label>
+        <input id="addr-country" type="text" name="country" value="{{ country }}" required
+          class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+      </div>
+    </div>
+
+    <div>
+      <label for="addr-email" class="block text-xs tracking-widest uppercase text-neutral-600 mb-3">Email <span class="normal-case tracking-normal">&middot; optional</span></label>
+      <input id="addr-email" type="email" name="email" value="{{ email }}"
+        placeholder="you@example.com"
+        autocomplete="email"
+        class="w-full border-b border-neutral-300 bg-transparent pb-2 text-neutral-800 placeholder-neutral-300 focus:outline-none focus:border-neutral-600 transition-colors text-sm">
+      <p class="text-xs text-neutral-600 mt-2">Only so we can reach you with a quick question if something looks off.</p>
+    </div>
+
+    <!-- Honeypot: hidden from humans, irresistible to bots. Never render a
+         visible version of this. -->
+    <div class="hidden" aria-hidden="true">
+      <label for="addr-website">Website</label>
+      <input id="addr-website" type="text" name="website" value="" tabindex="-1" autocomplete="off">
+    </div>
+
+    <button type="submit"
+      class="w-full py-4 text-xs tracking-widest uppercase bg-[#304629] text-white hover:bg-[#1c3a25] transition-colors">
+      Send Address
+    </button>
+
+  </form>
+</div>

@@ -35,31 +35,39 @@
     body { font-family: 'Montserrat', sans-serif; font-weight: 300; }
   </style>
 </head>
-<body class="bg-stone-50 text-stone-800">
+<body class="bg-neutral-50 text-neutral-800">
 
-  <nav class="fixed top-0 left-0 right-0 z-50 bg-stone-50/90 backdrop-blur-sm border-b border-stone-200">
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-neutral-50/90 backdrop-blur-sm border-b border-neutral-200">
     <div class="relative flex items-center px-4 py-4">
-      <a href="/" class="font-display text-xl tracking-widest text-stone-700">S &amp; T</a>
-      <ul class="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-8 text-xs tracking-widest uppercase text-stone-500">
-        <li><a href="/" class="hover:text-stone-800 transition-colors">Home</a></li>
-        <li><a href="/story" class="hover:text-stone-800 transition-colors">Our Story</a></li>
-        <li><a href="/details" class="hover:text-stone-800 transition-colors">Details</a></li>
-        <li><a href="/registry" class="hover:text-stone-800 transition-colors">Registry</a></li>
-        <li><a href="/rsvp" class="hover:text-stone-800 transition-colors">RSVP</a></li>
+      <a href="/" class="font-display text-xl tracking-widest text-[#304629]">S &amp; T</a>
+      <ul class="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-8 text-xs tracking-widest uppercase text-neutral-500">
+        <li><a href="/" class="hover:text-neutral-800 transition-colors">Home</a></li>
+        {% if crate::flags::all_pages_enabled() %}
+        <li><a href="/story" class="hover:text-neutral-800 transition-colors">Our Story</a></li>
+        <li><a href="/details" class="hover:text-neutral-800 transition-colors">Details</a></li>
+        <li><a href="/registry" class="hover:text-neutral-800 transition-colors">Registry</a></li>
+        <li><a href="/rsvp" class="hover:text-neutral-800 transition-colors">RSVP</a></li>
+        {% else %}
+        <li><a href="/address" class="hover:text-neutral-800 transition-colors">Address</a></li>
+        {% endif %}
       </ul>
       <button id="nav-toggle" class="md:hidden flex flex-col gap-1.5 p-1 ml-auto" aria-label="Toggle menu">
-        <span class="block w-6 h-px bg-stone-600"></span>
-        <span class="block w-6 h-px bg-stone-600"></span>
-        <span class="block w-6 h-px bg-stone-600"></span>
+        <span class="block w-6 h-px bg-neutral-600"></span>
+        <span class="block w-6 h-px bg-neutral-600"></span>
+        <span class="block w-6 h-px bg-neutral-600"></span>
       </button>
     </div>
-    <div id="nav-menu" class="hidden md:hidden border-t border-stone-200 bg-stone-50/95 backdrop-blur-sm">
-      <ul class="flex flex-col text-xs tracking-widest uppercase text-stone-500 px-6 py-4 gap-5">
-        <li><a href="/" class="hover:text-stone-800 transition-colors">Home</a></li>
-        <li><a href="/story" class="hover:text-stone-800 transition-colors">Our Story</a></li>
-        <li><a href="/details" class="hover:text-stone-800 transition-colors">Details</a></li>
-        <li><a href="/registry" class="hover:text-stone-800 transition-colors">Registry</a></li>
-        <li><a href="/rsvp" class="hover:text-stone-800 transition-colors">RSVP</a></li>
+    <div id="nav-menu" class="hidden md:hidden border-t border-neutral-200 bg-neutral-50/95 backdrop-blur-sm">
+      <ul class="flex flex-col text-xs tracking-widest uppercase text-neutral-500 px-6 py-4 gap-5">
+        <li><a href="/" class="hover:text-neutral-800 transition-colors">Home</a></li>
+        {% if crate::flags::all_pages_enabled() %}
+        <li><a href="/story" class="hover:text-neutral-800 transition-colors">Our Story</a></li>
+        <li><a href="/details" class="hover:text-neutral-800 transition-colors">Details</a></li>
+        <li><a href="/registry" class="hover:text-neutral-800 transition-colors">Registry</a></li>
+        <li><a href="/rsvp" class="hover:text-neutral-800 transition-colors">RSVP</a></li>
+        {% else %}
+        <li><a href="/address" class="hover:text-neutral-800 transition-colors">Address</a></li>
+        {% endif %}
       </ul>
     </div>
   </nav>
@@ -74,9 +82,9 @@
   </main>
 
   {% block footer %}
-  <footer class="mt-24 py-10 border-t border-stone-200 text-center">
-    <p class="font-display text-lg text-stone-400 italic">Sydney &amp; Tyler</p>
-    <p class="text-xs text-stone-300 tracking-widest uppercase mt-1">Est. 2028</p>
+  <footer class="mt-24 py-10 border-t border-neutral-200 text-center">
+    <p class="font-display text-lg text-neutral-400 italic">Sydney &amp; Tyler</p>
+    <p class="text-xs text-neutral-300 tracking-widest uppercase mt-1">Est. 2028</p>
   </footer>
   {% endblock %}
 

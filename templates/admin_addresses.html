@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Addresses{% endblock %}
+
+{% block content %}
+<section class="py-24 px-6">
+  <div class="max-w-4xl mx-auto">
+
+    <div class="flex justify-between items-center mb-2">
+      <nav class="flex gap-6 text-xs tracking-widest uppercase">
+        <a href="/admin" class="text-neutral-400 hover:text-neutral-700 transition-colors">Parties</a>
+        <a href="/admin/meals" class="text-neutral-400 hover:text-neutral-700 transition-colors">Meals</a>
+        <a href="/admin/events" class="text-neutral-400 hover:text-neutral-700 transition-colors">Events</a>
+        <a href="/admin/analytics" class="text-neutral-400 hover:text-neutral-700 transition-colors">Analytics</a>
+        <a href="/admin/import" class="text-neutral-400 hover:text-neutral-700 transition-colors">Import</a>
+        <span class="text-neutral-800 border-b border-neutral-800 pb-1">Addresses</span>
+        <a href="/admin/settings" class="text-neutral-400 hover:text-neutral-700 transition-colors">Settings</a>
+      </nav>
+      <form method="post" action="/admin/logout">
+        <button type="submit" class="text-xs tracking-widest uppercase text-neutral-400 hover:text-neutral-700 transition-colors">Log out</button>
+      </form>
+    </div>
+
+    <p class="text-xs tracking-[0.4em] uppercase text-neutral-400 mb-4 text-center">Couple Only</p>
+    <h1 class="font-display text-6xl text-neutral-800 text-center">Addresses</h1>
+    <div class="w-12 h-px bg-neutral-300 mx-auto mt-8 mb-16"></div>
+
+    <div class="flex items-baseline justify-between mb-6">
+      <h2 class="font-display text-4xl text-neutral-800">Mailing List</h2>
+      <a href="/admin/addresses/export" download="addresses.csv"
+         class="text-xs tracking-widest uppercase text-neutral-400 hover:text-neutral-700 transition-colors">
+        Download CSV
+      </a>
+    </div>
+
+    {% if addresses.is_empty() %}
+    <p class="text-neutral-400 text-sm mb-6">
+      No addresses yet. The public form lives at
+      <a href="/address" class="underline underline-offset-2 hover:text-neutral-700 transition-colors">/address</a>.
+    </p>
+    {% else %}
+    <p class="text-neutral-400 text-xs tracking-widest uppercase mb-4">{{ addresses.len() }} collected</p>
+    <div class="space-y-3">
+      {% for a in addresses %}
+      <div class="border border-neutral-200 bg-white p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="font-display text-xl text-neutral-800">{{ a.name }}</h3>
+            {% if let Some(email) = a.email %}<p class="text-xs text-neutral-500 mt-0.5">{{ email }}</p>{% endif %}
+            <p class="text-sm text-neutral-600 mt-2">
+              {{ a.street1 }}{% if let Some(street2) = a.street2 %}, {{ street2 }}{% endif %}<br>
+              {{ a.city }}{% if let Some(state) = a.state %}, {{ state }}{% endif %}
+              {% if let Some(postal) = a.postal_code %}{{ postal }}{% endif %} &middot; {{ a.country }}
+            </p>
+            <p class="text-xs text-neutral-400 mt-2">Added {{ a.created_at }}</p>
+          </div>
+          <form method="post" action="/admin/addresses/{{ a.id }}/delete"
+            onsubmit="return confirm('Delete {{ a.name }}? This removes the address from the mailing list — permanently.');">
+            <button type="submit" class="text-xs tracking-widest uppercase text-neutral-400 hover:text-red-600 transition-colors">Delete</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>
+</section>
+{% endblock %}

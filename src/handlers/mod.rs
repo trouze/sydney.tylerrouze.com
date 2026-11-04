@@ -1,3 +1,4 @@
+pub mod address;
 pub mod admin;
 pub mod details;
 pub mod home;

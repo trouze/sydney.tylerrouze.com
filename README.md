@@ -50,6 +50,7 @@ default; the listmonk sync stays off unless URL+USER+TOKEN are all present).
 | `LISTMONK_LIST_ID` | Target list id (defaults to `4` in-app) |
 | `DATABASE_URL` | Optional; defaults to `sqlite:data/wedding.db` |
 | `RESET_DB` | `true` to wipe the DB pre-launch (see deploy.yml) |
+| `ALL_PAGES` | Set truthy (`1`) to serve story/details/registry/rsvp; leave unset in prod |
 
 > Because the deploy recreates `wedding.env`, anything you previously set by hand
 > on the VM (e.g. `ADMIN_TOKEN`) must be added here, or it'll be dropped on the
@@ -88,6 +89,13 @@ For local testing of the admin flow before any of this:
 ADMIN_TOKEN=devtoken COOKIE_INSECURE=1 cargo run
 ```
 # visit http://localhost:8080/admin/login, password: devtoken
+
+Production serves only the landing page (plus /admin), and hides
+story/details/registry/rsvp behind a feature flag. To see all pages locally:
+
+```
+ADMIN_TOKEN=devtoken COOKIE_INSECURE=1 ALL_PAGES=1 cargo run
+```
 
 ## Mailing list (listmonk)
 

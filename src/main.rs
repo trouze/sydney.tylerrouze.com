@@ -10,6 +10,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod db;
 mod error;
+mod flags;
 mod handlers;
 mod listmonk;
 mod models;
@@ -44,13 +45,40 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::connect(&database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
 
+    // The landing page and /admin are always served. The pages we haven't
+    // committed to yet are gated behind the ALL_PAGES feature flag (see
+    // flags.rs); without it they simply don't exist and 404 like any other
+    // unknown path.
     let app = Router::new()
         .route("/", get(handlers::home::home))
-        .route("/details", get(handlers::details::details))
-        .route("/story", get(handlers::story::story))
-        .route("/registry", get(handlers::registry::registry))
-        .route("/rsvp", get(handlers::rsvp::rsvp_page))
-        .route("/rsvp", post(handlers::rsvp::rsvp_submit))
+        // Address collection ships with the pre-launch site: the landing page,
+        // this form, and the hidden /admin.
+        .route(
+            "/address",
+            get(handlers::address::address).post(handlers::address::submit),
+        );
+    let app = if flags::all_pages_enabled() {
+        app.route("/details", get(handlers::details::details))
+            .route("/story", get(handlers::story::story))
+            .route("/registry", get(handlers::registry::registry))
+            .route(
+                "/rsvp",
+                get(handlers::rsvp::rsvp_page).post(handlers::rsvp::rsvp_submit),
+            )
+    } else {
+        app
+    };
+    let all_pages = flags::all_pages_enabled();
+    tracing::info!(
+        "ALL_PAGES: {}",
+        if all_pages {
+            "on"
+        } else {
+            "off (landing page only)"
+        }
+    );
+
+    let app = app
         // ---- admin (shared-secret auth) ----
         .route("/admin", get(handlers::admin::dashboard))
         .route("/admin/login", get(handlers::admin::login_page))
@@ -87,6 +115,16 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/admin/settings",
             get(handlers::admin::settings_page).post(handlers::admin::save_settings),
+        )
+        // ---- mailing-list addresses (from the public /address form) ----
+        .route("/admin/addresses", get(handlers::admin::addresses_page))
+        .route(
+            "/admin/addresses/export",
+            get(handlers::admin::addresses_export),
+        )
+        .route(
+            "/admin/addresses/:id/delete",
+            post(handlers::admin::delete_address),
         )
         .route("/admin/qr/all.zip", get(handlers::qr::download_all_qr_zip))
         .route("/admin/parties/:id/qr.svg", get(handlers::qr::party_qr_svg))
