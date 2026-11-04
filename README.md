@@ -48,6 +48,7 @@ default; the listmonk sync stays off unless URL+USER+TOKEN are all present).
 | `LISTMONK_URL` | e.g. `https://mailing.tylerrouze.com` |
 | `LISTMONK_USER` | listmonk API username |
 | `LISTMONK_LIST_ID` | Target list id (defaults to `4` in-app) |
+| `LISTMONK_ADDRESS_LIST_ID` | Address-form contacts list; unset = no address sync |
 | `DATABASE_URL` | Optional; defaults to `sqlite:data/wedding.db` |
 | `RESET_DB` | `true` to wipe the DB pre-launch (see deploy.yml) |
 | `ALL_PAGES` | Set truthy (`1`) to serve story/details/registry/rsvp; leave unset in prod |

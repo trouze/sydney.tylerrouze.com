@@ -158,6 +158,16 @@ pub async fn submit(
     .execute(&pool)
     .await?;
 
+    // Like the RSVP flow: fire-and-forget sync of the (optional) email into
+    // listmonk, on its own list (LISTMONK_ADDRESS_LIST_ID). No-op when unset.
+    if !email.is_empty() {
+        crate::listmonk::sync_address_contacts(vec![crate::listmonk::Contact {
+            name: name.to_string(),
+            email: email.to_string(),
+            events_attending: Vec::new(),
+        }]);
+    }
+
     thanks_html(&name)
 }
 

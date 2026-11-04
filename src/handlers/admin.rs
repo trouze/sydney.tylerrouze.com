@@ -1547,7 +1547,7 @@ pub async fn addresses_export(
     .await?;
 
     let mut wtr = csv::Writer::from_writer(Vec::new());
-    wtr.write_record(&[
+    wtr.write_record([
         "name",
         "email",
         "street1",

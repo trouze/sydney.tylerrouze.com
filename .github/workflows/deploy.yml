@@ -102,6 +102,7 @@ jobs:
           LISTMONK_URL: ${{ vars.LISTMONK_URL }}
           LISTMONK_USER: ${{ vars.LISTMONK_USER }}
           LISTMONK_LIST_ID: ${{ vars.LISTMONK_LIST_ID }}
+          LISTMONK_ADDRESS_LIST_ID: ${{ vars.LISTMONK_ADDRESS_LIST_ID }}
           LISTMONK_TOKEN: ${{ secrets.LISTMONK_TOKEN }}
         run: |
           # Build the file locally (values travel over stdin, not the command
@@ -115,6 +116,7 @@ jobs:
             [ -n "$LISTMONK_USER" ]    && printf '%s\n' "LISTMONK_USER=$LISTMONK_USER"
             [ -n "$LISTMONK_TOKEN" ]   && printf '%s\n' "LISTMONK_TOKEN=$LISTMONK_TOKEN"
             [ -n "$LISTMONK_LIST_ID" ] && printf '%s\n' "LISTMONK_LIST_ID=$LISTMONK_LIST_ID"
+            [ -n "$LISTMONK_ADDRESS_LIST_ID" ] && printf '%s\n' "LISTMONK_ADDRESS_LIST_ID=$LISTMONK_ADDRESS_LIST_ID"
             true
           } | ssh $SSH_OPTS $VM "umask 077 && cat > '$ENV_PATH'"
 

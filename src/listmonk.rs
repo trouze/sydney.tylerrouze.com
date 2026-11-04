@@ -13,6 +13,8 @@
 //!   LISTMONK_USER     API username
 //!   LISTMONK_TOKEN    API access token
 //!   LISTMONK_LIST_ID  target list id (defaults to 4)
+//!   LISTMONK_ADDRESS_LIST_ID  target list for address-form contacts (optional;
+//!                             when unset, address submissions are never synced)
 
 use std::time::Duration;
 
@@ -24,6 +26,10 @@ pub struct Listmonk {
     user: String,
     token: String,
     list_id: i64,
+    /// Target list for the public address-collection form (list 6-style
+    /// "invitations pipeline" audience). Independent of the RSVP list so the
+    /// two audiences stay separable.
+    address_list_id: Option<i64>,
     client: reqwest::Client,
 }
 
@@ -52,6 +58,8 @@ impl Listmonk {
         let list_id = nonempty("LISTMONK_LIST_ID")
             .and_then(|v| v.trim().parse().ok())
             .unwrap_or(4);
+        let address_list_id =
+            nonempty("LISTMONK_ADDRESS_LIST_ID").and_then(|v| v.trim().parse().ok());
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
@@ -61,6 +69,7 @@ impl Listmonk {
             user,
             token,
             list_id,
+            address_list_id,
             client,
         })
     }
@@ -144,6 +153,67 @@ impl Listmonk {
         Ok(())
     }
 
+    /// Ensure the contact is on the address-list (the invitations pipeline),
+    /// creating the subscriber first if needed. Unlike `add_to_list` for RSVPs,
+    /// there are no `events_attending` attribs to maintain: the address stage
+    /// only adds a subscriber to the list (tagging `address_on_file` on create)
+    /// and leaves every existing subscriber untouched otherwise.
+    pub async fn add_address_to_list(&self, email: &str, name: &str) -> anyhow::Result<()> {
+        let Some(list_id) = self.address_list_id else {
+            anyhow::bail!("LISTMONK_ADDRESS_LIST_ID not set — address sync disabled");
+        };
+
+        let resp = self
+            .client
+            .post(format!("{}/api/subscribers", self.base_url))
+            .basic_auth(&self.user, Some(&self.token))
+            .json(&json!({
+                "email": email,
+                "name": name,
+                "status": "enabled",
+                "lists": [list_id],
+                "preconfirm_subscriptions": true,
+                "attribs": { "address_on_file": true },
+            }))
+            .send()
+            .await?;
+
+        if resp.status().is_success() {
+            return Ok(());
+        }
+        // Anything other than "already exists" is a real failure.
+        if resp.status() != reqwest::StatusCode::CONFLICT {
+            let code = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("listmonk create address subscriber failed ({code}): {body}");
+        }
+
+        // Already a subscriber (often from an RSVP): add them to the address
+        // list without touching their memberships or attributes.
+        let id = match self.find_subscriber(email).await? {
+            Some((id, _)) => id,
+            None => anyhow::bail!("listmonk says {email} exists but lookup returned nothing"),
+        };
+        let resp = self
+            .client
+            .put(format!("{}/api/subscribers/lists", self.base_url))
+            .basic_auth(&self.user, Some(&self.token))
+            .json(&json!({
+                "ids": [id],
+                "action": "add",
+                "target_list_ids": [list_id],
+                "status": "confirmed",
+            }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let code = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("listmonk add-to-address-list failed ({code}): {body}");
+        }
+        Ok(())
+    }
+
     /// Best-effort: set a subscriber's `events_attending` to `[]` if they already
     /// exist in listmonk. Never creates a subscriber and never changes list
     /// memberships — used when a party is deleted, so a former guest stops being
@@ -214,6 +284,32 @@ pub fn sync_contacts(contacts: Vec<Contact>) {
                     tracing::debug!("listmonk: synced {} to list {}", contact.email, lm.list_id)
                 }
                 Err(e) => tracing::warn!("listmonk: failed to sync {}: {e:#}", contact.email),
+            }
+        }
+    });
+}
+
+/// Fire-and-forget: add an address-form contact (with an email) to the
+/// address list. Same fire-and-forget contract as `sync_contacts`: never
+/// blocks or fails the form; a no-op unless LISTMONK_ADDRESS_LIST_ID is set.
+pub fn sync_address_contacts(contacts: Vec<Contact>) {
+    let Some(lm) = Listmonk::from_env() else {
+        return;
+    };
+    if lm.address_list_id.is_none() {
+        return;
+    }
+    tokio::spawn(async move {
+        for contact in contacts {
+            match lm.add_address_to_list(&contact.email, &contact.name).await {
+                Ok(()) => tracing::debug!(
+                    "listmonk: address-synced {} to list {:?}",
+                    contact.email,
+                    lm.address_list_id
+                ),
+                Err(e) => {
+                    tracing::warn!("listmonk: failed to address-sync {}: {e:#}", contact.email)
+                }
             }
         }
     });
@@ -342,6 +438,7 @@ mod tests {
             user: "u".into(),
             token: "t".into(),
             list_id: 4,
+            address_list_id: Some(6),
             client: reqwest::Client::new(),
         };
         (lm, calls)
@@ -412,6 +509,50 @@ mod tests {
         // A non-409 failure must surface as an error (so it's logged, not silent).
         let (lm, _calls) = mock_listmonk(500, None).await;
         assert!(lm.add_to_list(&contact("X", "x@x.com", &[])).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn address_contact_is_created_on_the_address_list() {
+        let (lm, calls) = mock_listmonk(201, None).await;
+        lm.add_address_to_list("sara@x.com", "Sara Smith")
+            .await
+            .unwrap();
+
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.posts.len(), 1);
+        assert!(calls.puts.is_empty(), "no list-add for a new subscriber");
+        assert!(
+            calls.patches.is_empty(),
+            "address flow sets no event attribs"
+        );
+        let body = &calls.posts[0];
+        assert_eq!(body["email"], "sara@x.com");
+        assert_eq!(body["name"], "Sara Smith");
+        assert_eq!(body["lists"], json!([6]));
+        assert_eq!(body["preconfirm_subscriptions"], json!(true));
+        assert_eq!(body["attribs"]["address_on_file"], json!(true));
+    }
+
+    #[tokio::test]
+    async fn existing_rsvp_subscriber_is_added_to_address_list_unchanged() {
+        // Someone who RSVP'd (hence already in listmonk) then filled the form:
+        // add them to the address list, but never touch attribs/memberships.
+        let (lm, calls) = mock_listmonk(409, Some(7)).await;
+        lm.add_address_to_list("bob@x.com", "Bob Jones")
+            .await
+            .unwrap();
+
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.posts.len(), 1, "create is still attempted first");
+        assert!(
+            calls.patches.is_empty(),
+            "must not overwrite the attendee's RSVP attribs"
+        );
+        let put = &calls.puts[0];
+        assert_eq!(put["ids"], json!([7]));
+        assert_eq!(put["action"], "add");
+        assert_eq!(put["target_list_ids"], json!([6]));
+        assert_eq!(put["status"], "confirmed");
     }
 
     #[tokio::test]
