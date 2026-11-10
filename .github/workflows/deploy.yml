@@ -63,27 +63,6 @@ jobs:
           rsync -az --delete -e "ssh $SSH_OPTS" \
             static/ "$VM:/home/exedev/sydney.tylerrouze.com/static/"
 
-      # Pre-launch only: wipe the DB so sqlx re-runs migrations from scratch.
-      # Controlled by the repo variable RESET_DB (Settings -> Secrets and
-      # variables -> Actions -> Variables). Set it to 'true' while the schema is
-      # still churning; delete it (or set 'false') once the site is live.
-      - name: Reset database (pre-launch only)
-        if: vars.RESET_DB == 'true'
-        env:
-          SSH_OPTS: -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no
-          VM: exedev@${{ secrets.VM_NAME }}.exe.xyz
-        run: |
-          ssh $SSH_OPTS $VM bash -s <<'EOF'
-          set -euo pipefail
-          DB=/home/exedev/sydney.tylerrouze.com/data/wedding.db
-          if [ ! -f "$DB" ]; then
-            echo "No DB present yet; nothing to reset."
-            exit 0
-          fi
-          rm -f "$DB" "$DB-shm" "$DB-wal"
-          echo "Database reset."
-          EOF
-
       # Consolidated app config. GitHub is the source of truth: this file is
       # rewritten every deploy, so any value not present as a repo Secret/Variable
       # is dropped. Empty values are omitted (the app falls back to its defaults;

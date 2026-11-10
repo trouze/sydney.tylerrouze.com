@@ -8,7 +8,7 @@ if ! command -v cargo &>/dev/null; then
 fi
 
 # Install sqlite3 dev headers (needed by libsqlite3-sys) and the sqlite3 CLI
-# (used by the deploy workflow's pre-launch DB reset guard).
+# for inspecting or backing up the database.
 if command -v apt-get &>/dev/null; then
   apt-get update -qq && apt-get install -y -qq libsqlite3-dev sqlite3 pkg-config
 fi

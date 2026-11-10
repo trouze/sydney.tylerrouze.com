@@ -50,12 +50,16 @@ default; the listmonk sync stays off unless URL+USER+TOKEN are all present).
 | `LISTMONK_LIST_ID` | Target list id (defaults to `4` in-app) |
 | `LISTMONK_ADDRESS_LIST_ID` | Address-form contacts list; unset = no address sync |
 | `DATABASE_URL` | Optional; defaults to `sqlite:data/wedding.db` |
-| `RESET_DB` | `true` to wipe the DB pre-launch (see deploy.yml) |
 | `ALL_PAGES` | Set truthy (`1`) to serve story/details/registry/rsvp; leave unset in prod |
 
 > Because the deploy recreates `wedding.env`, anything you previously set by hand
 > on the VM (e.g. `ADMIN_TOKEN`) must be added here, or it'll be dropped on the
 > next deploy.
+
+The deploy workflow leaves the production SQLite database in place. On startup,
+the app applies any pending SQLx migrations from `migrations/`; make schema
+changes by adding a new migration rather than resetting the database. Back up
+the production database before applying migrations that alter or remove data.
 
 Set the app config from the template files (each `*.example` lists every key —
 copy, fill in real values, and push). The filled files are gitignored:

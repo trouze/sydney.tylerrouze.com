@@ -18,7 +18,9 @@
     <p class="text-xs tracking-[0.3em] uppercase text-neutral-700 mt-2">
       Mexico City, Mexico
     </p>
+    {% if crate::flags::all_pages_enabled() %}
     <p class="font-display italic text-neutral-600 mt-2">Casa de la Bola</p>
+    {% endif %}
     <div class="mt-8 flex gap-4 justify-center flex-wrap">
       {% if crate::flags::all_pages_enabled() %}
       <a href="/details" class="px-10 py-3 text-xs tracking-widest uppercase border border-neutral-800 text-neutral-800 hover:bg-neutral-800 hover:text-white transition-colors">
